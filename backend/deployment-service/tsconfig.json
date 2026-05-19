@@ -3,13 +3,11 @@
     "target": "ES2022",
     "module": "CommonJS",
     "rootDir": "./src",
-    "moduleResolution": "node",
     "outDir": "./dist",
-    "esModuleInterop": true,
     "strict": true,
+    "esModuleInterop": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true
   },
-  "include": ["src/**/*"],
-  "exclude": ["node_modules"]
+  "include": ["src/**/*"]
 }
