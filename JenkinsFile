@@ -1,0 +1,34 @@
+pipeline {
+    agent any
+    
+    environment {
+        DOCKER_COMPOSE_CMD = 'docker-compose'
+    }
+    
+    stages {
+        stage('Checkout') {
+            steps {
+                checkout scm
+            }
+        }
+        
+        stage('Build Docker Images') {
+            steps {
+                sh '${DOCKER_COMPOSE_CMD} build'
+            }
+        }
+        
+        stage('Deploy') {
+            steps {
+                sh '${DOCKER_COMPOSE_CMD} down'
+                sh '${DOCKER_COMPOSE_CMD} up -d'
+            }
+        }
+    }
+    
+    post {
+        always {
+            echo 'Deployment cycle complete.'
+        }
+    }
+}
