@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   reverse-proxy:
     image: nginx:alpine
@@ -10,15 +8,15 @@ services:
     depends_on:
       - frontend
       - auth-service
-      - deployment-service
-      - analytics-service
+      # - deployment-service
+      # - analytics-service
 
   frontend:
     build: 
       context: ./frontend
       dockerfile: Dockerfile
     environment:
-      - VITE_API_URL=http://localhost/api
+      - VITE_API_URL=http://localhost:3001/api
     depends_on:
       - auth-service
 
@@ -31,33 +29,35 @@ services:
       - JWT_SECRET=supersecret
     depends_on:
       - postgres
+    ports:
+      - "3001:3001"
 
-  deployment-service:
-    build:
-      context: ./backend/deployment-service
-      dockerfile: Dockerfile
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock # Allows dockerode to manage containers
-    environment:
-      - PORT=3002
+  # deployment-service:
+  #   build:
+  #     context: ./backend/deployment-service
+  #     dockerfile: Dockerfile
+  #   volumes:
+  #     - /var/run/docker.sock:/var/run/docker.sock # Allows dockerode to manage containers
+  #   environment:
+  #     - PORT=3002
 
-  monitoring-service:
-    build:
-      context: ./backend/monitoring-service
-      dockerfile: Dockerfile
-    environment:
-      - PORT=3003
+  # monitoring-service:
+  #   build:
+  #     context: ./backend/monitoring-service
+  #     dockerfile: Dockerfile
+  #   environment:
+  #     - PORT=3003
 
-  analytics-service:
-    build:
-      context: ./analytics-service
-      dockerfile: Dockerfile
-    environment:
-      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/deployiq_db
-      - SPRING_DATASOURCE_USERNAME=deployiq
-      - SPRING_DATASOURCE_PASSWORD=password
-    depends_on:
-      - postgres
+  # analytics-service:
+  #   build:
+  #     context: ./analytics-service
+  #     dockerfile: Dockerfile
+  #   environment:
+  #     - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/deployiq_db
+  #     - SPRING_DATASOURCE_USERNAME=deployiq
+  #     - SPRING_DATASOURCE_PASSWORD=password
+  #   depends_on:
+  #     - postgres
 
   postgres:
     image: postgres:15-alpine
