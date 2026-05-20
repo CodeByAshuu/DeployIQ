@@ -3,6 +3,8 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import authRoutes from './routes/auth.routes.js';
 import projectRoutes from './routes/project.routes.js';
+import deploymentRoutes from './routes/deployment.routes.js';
+import dockerRoutes from './routes/docker.routes.js';
 import { errorHandler } from './middlewares/errorHandler.js';
 import { logger } from './utils/logger.js';
 
@@ -17,7 +19,9 @@ app.use(express.json());
 // Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/projects', projectRoutes);
-console.log('PROJECT ROUTES MOUNTED');
+app.use('/api/deployments', deploymentRoutes);
+app.use('/api/docker', dockerRoutes);
+console.log('ALL ROUTES MOUNTED (auth, projects, deployments, docker)');
 
 // Health check
 app.get('/health', (req, res) => {

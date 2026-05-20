@@ -20,21 +20,15 @@ enum ProjectStatus {
   FAILED
 }
 
-enum DeploymentStatus {
-  PENDING
-  BUILDING
-  SUCCESS
-  FAILED
-}
-
 model User {
-  id        String    @id @default(uuid())
-  name      String
-  email     String    @unique
-  password  String
-  role      Role      @default(USER)
-  createdAt DateTime  @default(now())
-  projects  Project[]
+  id          String    @id @default(uuid())
+  name        String
+  email       String    @unique
+  password    String
+  role        Role      @default(USER)
+  createdAt   DateTime  @default(now())
+  projects    Project[]
+  deployments Deployment[] @relation("UserDeployments")
 }
 
 model Project {
@@ -49,13 +43,23 @@ model Project {
   deployments      Deployment[]
 }
 
-model Deployment {
-  id        String   @id @default(uuid())
-  status    String
-  version   String
-  logs      String?  @db.Text
-  projectId String
-  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  createdAt DateTime @default(now())
+enum DeploymentStatus {
+  PENDING
+  BUILDING
+  RUNNING
+  SUCCESS
+  FAILED
 }
 
+model Deployment {
+  id         String          @id @default(uuid())
+  status     DeploymentStatus @default(PENDING)
+  imageTag   String?
+  logs       String?         @db.Text
+  deployedBy String
+  deployedByUser User          @relation("UserDeployments", fields: [deployedBy], references: [id], onDelete: Cascade)
+  projectId  String
+  project    Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  deployedAt DateTime        @default(now())
+  updatedAt  DateTime        @updatedAt
+}

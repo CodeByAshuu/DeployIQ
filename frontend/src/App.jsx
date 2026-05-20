@@ -10,6 +10,10 @@ import EditProject from './pages/EditProject.jsx';
 import ProjectDetails from './pages/ProjectDetails.jsx';
 import Login from './pages/Login.jsx';
 import Register from './pages/Register.jsx';
+import Deployments from './pages/Deployments.jsx';
+import DeploymentDetails from './pages/DeploymentDetails.jsx';
+import Monitoring from './pages/Monitoring.jsx';
+import Logs from './pages/Logs.jsx';
 
 export default function App() {
   return (
@@ -69,6 +73,50 @@ export default function App() {
               <ProtectedRoute>
                 <DashboardLayout>
                   <EditProject />
+                </DashboardLayout>
+              </ProtectedRoute>
+            } 
+          />
+
+          <Route 
+            path="/deployments" 
+            element={
+              <ProtectedRoute>
+                <DashboardLayout>
+                  <Deployments />
+                </DashboardLayout>
+              </ProtectedRoute>
+            } 
+          />
+
+          <Route 
+            path="/deployments/:id" 
+            element={
+              <ProtectedRoute>
+                <DashboardLayout>
+                  <DeploymentDetails />
+                </DashboardLayout>
+              </ProtectedRoute>
+            } 
+          />
+
+          <Route 
+            path="/monitoring" 
+            element={
+              <ProtectedRoute>
+                <DashboardLayout>
+                  <Monitoring />
+                </DashboardLayout>
+              </ProtectedRoute>
+            } 
+          />
+
+          <Route 
+            path="/logs" 
+            element={
+              <ProtectedRoute>
+                <DashboardLayout>
+                  <Logs />
                 </DashboardLayout>
               </ProtectedRoute>
             } 

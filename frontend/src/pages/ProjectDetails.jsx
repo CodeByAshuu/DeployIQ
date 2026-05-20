@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { getProject, deleteProject } from '../services/project.js';
+import { createDeployment, triggerDeployment } from '../services/deployment.js';
 
 export default function ProjectDetails() {
   const { id } = useParams();
@@ -9,6 +10,7 @@ export default function ProjectDetails() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
   const [simulatedLogs, setSimulatedLogs] = useState([]);
+  const [isDeploying, setIsDeploying] = useState(false);
 
   useEffect(() => {
     fetchProject();
@@ -63,6 +65,20 @@ export default function ProjectDetails() {
       navigate('/projects');
     } catch (err) {
       alert(err.response?.data?.error || 'Failed to delete project.');
+    }
+  };
+
+  const handleManualDeploy = async () => {
+    setIsDeploying(true);
+    try {
+      const deploy = await createDeployment(id, 'latest');
+      await triggerDeployment(deploy.id);
+      navigate(`/deployments/${deploy.id}`);
+    } catch (err) {
+      console.error(err);
+      alert(err.response?.data?.error || 'Failed to trigger deployment.');
+    } finally {
+      setIsDeploying(false);
     }
   };
 
@@ -271,10 +287,14 @@ export default function ProjectDetails() {
                 Campus Automations
               </h2>
               <p className="text-[11px] text-gray-500 leading-relaxed">
-                Connect Webhooks or CI/CD pipelines to build and deploy this service dynamically on commit events.
+                Trigger an automated pipeline run for this project. This will fetch the latest code from GitHub and deploy it to a container.
               </p>
-              <button className="w-full bg-[#1a1a1a] hover:bg-white/5 border border-white/10 hover:border-white/20 text-white font-bold py-2 rounded text-[10px] transition-colors cursor-not-allowed uppercase shrink-0">
-                Trigger Manual Deploy
+              <button
+                onClick={handleManualDeploy}
+                disabled={isDeploying}
+                className="w-full bg-emerald-950 hover:bg-emerald-900 border border-emerald-500/30 hover:border-emerald-500/50 text-emerald-400 hover:text-emerald-300 font-bold py-2 rounded text-[10px] transition-colors cursor-pointer uppercase shrink-0"
+              >
+                {isDeploying ? 'Deploying...' : 'Trigger Manual Deploy'}
               </button>
             </div>
           </div>
