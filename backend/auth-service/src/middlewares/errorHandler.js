@@ -1,7 +1,6 @@
-import { Request, Response, NextFunction } from 'express';
-import { logger } from '../utils/logger';
+import { logger } from '../utils/logger.js';
 
-export const errorHandler = (err: any, req: Request, res: Response, next: NextFunction) => {
+export const errorHandler = (err, req, res, next) => {
   logger.error(`${err.name}: ${err.message}`);
   
   const statusCode = err.statusCode || 500;

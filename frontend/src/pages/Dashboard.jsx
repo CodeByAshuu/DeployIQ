@@ -1,83 +1,94 @@
 import React from 'react';
+import { useAuth } from '../context/AuthContext.jsx';
 
 export default function Dashboard() {
+  const { user } = useAuth();
+
   return (
-    <div className="w-full">
-      <div className="max-w-7xl mx-auto space-y-8">
-        
-        {/* Header Section */}
-        <header className="flex justify-between items-center glass-panel p-6 rounded-2xl shadow-2xl">
-          <div>
-            <h1 className="text-3xl md:text-4xl font-extrabold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-emerald-400 tracking-tight">
-              DeployIQ Dashboard
+    <div className="space-y-6 font-mono text-gray-300">
+      {/* Header Section */}
+      <header className="devops-panel p-6 rounded-xl border devops-border shadow-lg flex flex-col md:flex-row justify-between items-start md:items-center space-y-4 md:space-y-0">
+        <div>
+          <div className="flex items-center space-x-2">
+            <span className="text-gray-500 font-bold">$</span>
+            <h1 className="text-2xl font-bold text-white tracking-wider">
+              systemctl status deployiq
             </h1>
-            <p className="text-gray-400 mt-2 text-sm font-medium">Smart Campus Deployment Portal</p>
           </div>
-          <div className="flex items-center space-x-4">
-            <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-blue-500 to-purple-500 p-[2px] animate-pulse-slow">
-              <div className="w-full h-full bg-[#09090b] rounded-full flex items-center justify-center">
-                <span className="text-sm font-bold text-white">AD</span>
-              </div>
-            </div>
-          </div>
-        </header>
-
-        {/* Stats Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {[
-            { label: 'Active Containers', value: '24', color: 'from-blue-500 to-cyan-400' },
-            { label: 'Uptime', value: '99.9%', color: 'from-emerald-400 to-green-500' },
-            { label: 'Failed Deployments', value: '0', color: 'from-red-500 to-orange-500' }
-          ].map((stat, idx) => (
-            <div key={idx} className="glass-panel p-6 rounded-2xl hover:bg-white/[0.05] transition-all duration-300 group cursor-pointer relative overflow-hidden">
-              <div className={`absolute inset-0 bg-gradient-to-br ${stat.color} opacity-0 group-hover:opacity-10 transition-opacity duration-300`} />
-              <p className="text-gray-400 text-sm font-medium mb-2">{stat.label}</p>
-              <h2 className="text-4xl font-bold">{stat.value}</h2>
-            </div>
-          ))}
+          <p className="text-xs text-gray-500 mt-2">
+            Smart Campus Deployment Portal • Active Session Operator: <span className="text-white">{user?.name || 'Operator'}</span>
+          </p>
         </div>
+        <div className="flex items-center space-x-3 text-xs bg-[#1a1a1a] px-3.5 py-2 rounded-lg border devops-border">
+          <span className="w-2 h-2 rounded-full status-success animate-pulse"></span>
+          <span className="text-gray-400 uppercase font-bold text-[10px]">CLUSTER: ACTIVE</span>
+        </div>
+      </header>
 
-        {/* Recent Deployments Table */}
-        <div className="glass-panel rounded-2xl overflow-hidden">
-          <div className="p-6 border-b border-white/[0.05] flex justify-between items-center">
-            <h3 className="text-xl font-semibold">Recent Deployments</h3>
-            <button className="px-4 py-2 bg-blue-600 hover:bg-blue-500 transition-colors text-sm font-medium rounded-lg text-white shadow-lg shadow-blue-500/20">
-              + New Deployment
-            </button>
+      {/* Stats Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+        {[
+          { label: 'ACTIVE CONTAINERS', value: '24', statusClass: 'status-success', desc: 'Running campus microservices' },
+          { label: 'SYSTEM UPTIME', value: '99.98%', statusClass: 'status-success', desc: 'Average across all node pools' },
+          { label: 'FAILED DEPLOYMENTS', value: '0', statusClass: 'status-info', desc: 'No errors registered in last 24h' }
+        ].map((stat, idx) => (
+          <div key={idx} className="devops-panel p-6 rounded-xl border devops-border flex flex-col justify-between h-36">
+            <div className="flex justify-between items-start">
+              <span className="text-[10px] text-gray-500 font-bold tracking-widest">{stat.label}</span>
+              <span className={`w-2 h-2 rounded-full ${stat.statusClass}`}></span>
+            </div>
+            <div>
+              <h2 className="text-3xl font-bold text-white tracking-tight">{stat.value}</h2>
+              <p className="text-[10px] text-gray-500 mt-1">{stat.desc}</p>
+            </div>
           </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse min-w-[600px]">
-              <thead>
-                <tr className="bg-white/[0.02]">
-                  <th className="p-4 text-xs font-semibold text-gray-400 uppercase tracking-wider">Service Name</th>
-                  <th className="p-4 text-xs font-semibold text-gray-400 uppercase tracking-wider">Status</th>
-                  <th className="p-4 text-xs font-semibold text-gray-400 uppercase tracking-wider">Version</th>
-                  <th className="p-4 text-xs font-semibold text-gray-400 uppercase tracking-wider">Deployed</th>
+        ))}
+      </div>
+
+      {/* Recent Deployments Panel */}
+      <div className="devops-panel rounded-xl border devops-border overflow-hidden">
+        <div className="p-5 border-b devops-border bg-[#202020] flex flex-col sm:flex-row justify-between items-start sm:items-center space-y-3 sm:space-y-0">
+          <div>
+            <h3 className="text-sm font-bold text-white uppercase tracking-wider flex items-center">
+              <span className="text-gray-600 mr-1.5">&gt;</span> Recent Deployments
+            </h3>
+            <p className="text-[10px] text-gray-500 mt-0.5">Showing last 3 jobs run on campus servers</p>
+          </div>
+          <button className="terminal-button text-xs py-1.5 px-4 font-mono">
+            + New Deployment
+          </button>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse text-xs">
+            <thead>
+              <tr className="bg-[#1a1a1a] text-gray-500 border-b devops-border font-bold uppercase tracking-wider">
+                <th className="p-4 text-[10px]">Service Name</th>
+                <th className="p-4 text-[10px]">Status</th>
+                <th className="p-4 text-[10px]">Version</th>
+                <th className="p-4 text-[10px]">Deployed</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y devops-border">
+              {[
+                { name: 'Student Portal API', status: 'Running', ver: 'v2.1.0', time: '2 mins ago', dotClass: 'status-success' },
+                { name: 'Library Service', status: 'Running', ver: 'v1.4.2', time: '1 hour ago', dotClass: 'status-success' },
+                { name: 'Analytics Worker', status: 'Stopped', ver: 'v1.0.0', time: '3 hours ago', dotClass: 'status-danger' },
+              ].map((item, idx) => (
+                <tr key={idx} className="hover:bg-white/[0.01] transition-colors">
+                  <td className="p-4 font-semibold text-white">{item.name}</td>
+                  <td className="p-4">
+                    <span className="flex items-center space-x-2">
+                      <span className={`w-1.5 h-1.5 rounded-full ${item.dotClass}`}></span>
+                      <span>{item.status}</span>
+                    </span>
+                  </td>
+                  <td className="p-4 text-gray-400 font-mono">{item.ver}</td>
+                  <td className="p-4 text-gray-500">{item.time}</td>
                 </tr>
-              </thead>
-              <tbody className="divide-y divide-white/[0.05]">
-                {[
-                  { name: 'Student Portal API', status: 'Running', ver: 'v2.1.0', time: '2 mins ago', dot: 'bg-green-500', dotGlow: 'shadow-[0_0_8px_rgba(34,197,94,0.6)]' },
-                  { name: 'Library Service', status: 'Running', ver: 'v1.4.2', time: '1 hour ago', dot: 'bg-green-500', dotGlow: 'shadow-[0_0_8px_rgba(34,197,94,0.6)]' },
-                  { name: 'Analytics Worker', status: 'Stopped', ver: 'v1.0.0', time: '3 hours ago', dot: 'bg-red-500', dotGlow: 'shadow-[0_0_8px_rgba(239,68,68,0.6)]' },
-                ].map((item, idx) => (
-                  <tr key={idx} className="hover:bg-white/[0.02] transition-colors cursor-pointer">
-                    <td className="p-4 font-medium text-gray-200">{item.name}</td>
-                    <td className="p-4">
-                      <span className="flex items-center space-x-2 text-sm text-gray-300">
-                        <span className={`w-2 h-2 rounded-full ${item.dot} ${item.dotGlow}`}></span>
-                        <span>{item.status}</span>
-                      </span>
-                    </td>
-                    <td className="p-4 text-sm text-gray-400 font-mono">{item.ver}</td>
-                    <td className="p-4 text-sm text-gray-400">{item.time}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+              ))}
+            </tbody>
+          </table>
         </div>
-
       </div>
     </div>
   );
