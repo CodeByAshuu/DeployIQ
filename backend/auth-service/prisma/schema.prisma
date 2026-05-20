@@ -13,6 +13,20 @@ enum Role {
   VIEWER
 }
 
+enum ProjectStatus {
+  PENDING
+  DEPLOYING
+  SUCCESS
+  FAILED
+}
+
+enum DeploymentStatus {
+  PENDING
+  BUILDING
+  SUCCESS
+  FAILED
+}
+
 model User {
   id        String    @id @default(uuid())
   name      String
@@ -30,6 +44,7 @@ model Project {
   githubRepo  String
   ownerId     String
   owner       User         @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  status      ProjectStatus @default(PENDING)
   createdAt   DateTime     @default(now())
   deployments Deployment[]
 }
