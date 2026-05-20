@@ -1,21 +1,61 @@
-import { prisma } from '../../config/db.js';
+import { prisma } from '../config/db.js';
 
-export const createProject = async (data) => {
-  return await prisma.project.create({ data });
+export const createProject = async (data, ownerId) => {
+  return await prisma.project.create({
+    data: {
+      name: data.name,
+      description: data.description,
+      githubRepo: data.githubRepo,
+      ownerId: ownerId,
+    },
+  });
 };
 
-export const getProjectById = async (id) => {
-  return await prisma.project.findUnique({ where: { id } });
+export const getProjectsByOwner = async (ownerId) => {
+  return await prisma.project.findMany({
+    where: { ownerId },
+    orderBy: { createdAt: 'desc' },
+  });
 };
 
-export const listProjects = async () => {
-  return await prisma.project.findMany({ include: { owner: true } });
+export const getProjectByIdAndOwner = async (id, ownerId) => {
+  return await prisma.project.findFirst({
+    where: { id, ownerId },
+  });
 };
 
-export const updateProject = async (id, data) => {
-  return await prisma.project.update({ where: { id }, data });
+export const updateProject = async (id, ownerId, data) => {
+  // Verify ownership first
+  const project = await prisma.project.findFirst({
+    where: { id, ownerId },
+  });
+
+  if (!project) {
+    throw new Error('Project not found or access denied');
+  }
+
+  return await prisma.project.update({
+    where: { id },
+    data: {
+      name: data.name,
+      description: data.description,
+      githubRepo: data.githubRepo,
+      deploymentStatus: data.deploymentStatus,
+    },
+  });
 };
 
-export const deleteProject = async (id) => {
-  return await prisma.project.delete({ where: { id } });
+export const deleteProject = async (id, ownerId) => {
+  // Verify ownership first
+  const project = await prisma.project.findFirst({
+    where: { id, ownerId },
+  });
+
+  if (!project) {
+    throw new Error('Project not found or access denied');
+  }
+
+  return await prisma.project.delete({
+    where: { id },
+  });
 };

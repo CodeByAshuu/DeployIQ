@@ -4,6 +4,10 @@ import { AuthProvider } from './context/AuthContext.jsx';
 import ProtectedRoute from './components/ProtectedRoute.jsx';
 import DashboardLayout from './layouts/DashboardLayout.jsx';
 import Dashboard from './pages/Dashboard.jsx';
+import Projects from './pages/Projects.jsx';
+import CreateProject from './pages/CreateProject.jsx';
+import EditProject from './pages/EditProject.jsx';
+import ProjectDetails from './pages/ProjectDetails.jsx';
 import Login from './pages/Login.jsx';
 import Register from './pages/Register.jsx';
 
@@ -21,6 +25,50 @@ export default function App() {
               <ProtectedRoute>
                 <DashboardLayout>
                   <Dashboard />
+                </DashboardLayout>
+              </ProtectedRoute>
+            } 
+          />
+
+          <Route 
+            path="/projects" 
+            element={
+              <ProtectedRoute>
+                <DashboardLayout>
+                  <Projects />
+                </DashboardLayout>
+              </ProtectedRoute>
+            } 
+          />
+
+          <Route 
+            path="/projects/new" 
+            element={
+              <ProtectedRoute>
+                <DashboardLayout>
+                  <CreateProject />
+                </DashboardLayout>
+              </ProtectedRoute>
+            } 
+          />
+
+          <Route 
+            path="/projects/:id" 
+            element={
+              <ProtectedRoute>
+                <DashboardLayout>
+                  <ProjectDetails />
+                </DashboardLayout>
+              </ProtectedRoute>
+            } 
+          />
+
+          <Route 
+            path="/projects/:id/edit" 
+            element={
+              <ProtectedRoute>
+                <DashboardLayout>
+                  <EditProject />
                 </DashboardLayout>
               </ProtectedRoute>
             } 

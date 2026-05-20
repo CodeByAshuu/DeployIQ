@@ -36,17 +36,14 @@ export default function DashboardLayout({ children }) {
         {/* Navigation */}
         <nav className="flex-1 py-6 px-4 space-y-1.5">
           {navItems.map((item, idx) => {
-            // Since we only have /dashboard page implemented right now, all items can just render or we can highlight dashboard
-            const isActive = item.path === '/dashboard';
+            const isActive = location.pathname.startsWith(item.path);
             return (
               <a
                 key={idx}
-                href="#"
+                href={item.path}
                 onClick={(e) => {
                   e.preventDefault();
-                  if (item.path === '/dashboard') {
-                    navigate('/dashboard');
-                  }
+                  navigate(item.path);
                 }}
                 className={`flex items-center px-4 py-2.5 rounded-lg border transition-all duration-150 ${
                   isActive

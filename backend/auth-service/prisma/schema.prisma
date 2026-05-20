@@ -38,15 +38,15 @@ model User {
 }
 
 model Project {
-  id          String       @id @default(uuid())
-  name        String
-  description String?
-  githubRepo  String
-  ownerId     String
-  owner       User         @relation(fields: [ownerId], references: [id], onDelete: Cascade)
-  status      ProjectStatus @default(PENDING)
-  createdAt   DateTime     @default(now())
-  deployments Deployment[]
+  id               String        @id @default(uuid())
+  name             String
+  description      String?
+  githubRepo       String
+  ownerId          String
+  owner            User          @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  deploymentStatus ProjectStatus @default(PENDING)
+  createdAt        DateTime      @default(now())
+  deployments      Deployment[]
 }
 
 model Deployment {
