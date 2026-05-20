@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 
-export default function ProjectForm({ initialData = {}, onSubmit, isLoading, error }) {
+export default function ProjectForm({ initialData, onSubmit, isLoading, error }) {
   const [formData, setFormData] = useState({
     name: '',
     description: '',
@@ -9,7 +9,7 @@ export default function ProjectForm({ initialData = {}, onSubmit, isLoading, err
   const [validationError, setValidationError] = useState('');
 
   useEffect(() => {
-    if (initialData) {
+    if (initialData && Object.keys(initialData).length > 0) {
       setFormData({
         name: initialData.name || '',
         description: initialData.description || '',

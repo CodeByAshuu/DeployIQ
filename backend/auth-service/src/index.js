@@ -17,6 +17,7 @@ app.use(express.json());
 // Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/projects', projectRoutes);
+console.log('PROJECT ROUTES MOUNTED');
 
 // Health check
 app.get('/health', (req, res) => {
