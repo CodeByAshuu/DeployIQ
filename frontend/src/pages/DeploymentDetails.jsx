@@ -102,19 +102,35 @@ export default function DeploymentDetails() {
     { title: 'Release Success', active: hasSuccess, success: hasSuccess, failed: hasFailed, desc: 'App is routing live traffic' },
   ];
 
+  // Compute progress percentage for UI
+  const completedSteps = steps.filter(s => s.success).length;
+  const progressPercent = Math.round((completedSteps / steps.length) * 100);
+
   return (
     <div className="space-y-6 font-mono text-gray-300">
       {/* Header breadcrumb */}
-      <div className="flex justify-between items-center">
-        <button
-          onClick={() => navigate('/deployments')}
-          className="text-xs bg-[#242424] hover:bg-[#2e2e2e] border border-white/5 px-3 py-1.5 rounded text-gray-400 hover:text-white transition-colors"
-        >
-          &lt; back_to_deployments
-        </button>
-        <div className="text-xs text-gray-500">
-          DEPLOYMENT_ID: <span className="text-white">{deployment.id}</span>
+      <div className="flex flex-col space-y-2">
+        <div className="flex justify-between items-center">
+          <button
+            onClick={() => navigate('/deployments')}
+            className="text-xs bg-[#242424] hover:bg-[#2e2e2e] border border-white/5 px-3 py-1.5 rounded text-gray-400 hover:text-white transition-colors"
+          >
+            &lt; back_to_deployments
+          </button>
+          <div className="text-xs text-gray-500">
+            DEPLOYMENT_ID: <span className="text-white">{deployment.id}</span>
+          </div>
         </div>
+        {/* Progress bar */}
+        <div className="w-full bg-gray-800 h-2 rounded">
+          <div className="bg-emerald-500 h-2 rounded" style={{ width: `${progressPercent}%` }} />
+        </div>
+        {/* Duration display after completion */}
+        {(deployment.status === 'SUCCESS' || deployment.status === 'FAILED') && (
+          <div className="text-xs text-gray-400">
+            Duration: {deployment.durationMs ? `${deployment.durationMs}s` : 'calculating...'}
+          </div>
+        )}
       </div>
 
       {/* Info Card & Action */}

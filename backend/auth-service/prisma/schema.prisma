@@ -62,4 +62,5 @@ model Deployment {
   project    Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
   deployedAt DateTime        @default(now())
   updatedAt  DateTime        @updatedAt
+  durationMs Int? @default(0)
 }

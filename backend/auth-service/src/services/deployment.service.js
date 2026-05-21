@@ -84,11 +84,16 @@ export const updateDeploymentStatus = async (id, status, extraLogs = '') => {
 
   const updatedLogs = deployment.logs + extraLogs + '\n';
 
+  // Update deployment status
   const updatedDeployment = await prisma.deployment.update({
     where: { id },
     data: {
       status,
       logs: updatedLogs,
+      // Record duration when completing
+      ...(status === 'SUCCESS' || status === 'FAILED'
+        ? { durationMs: Math.floor((new Date() - deployment.deployedAt) / 1000) }
+        : {}),
     },
   });
 
@@ -130,60 +135,38 @@ export const deleteDeployment = async (id, ownerId) => {
 // Simulation pipeline logic
 export const runDeploymentSimulation = async (id) => {
   const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+  const now = () => new Date().toLocaleTimeString();
 
   try {
-    // 1. Pending -> Building (GitHub Pull)
-    await updateDeploymentStatus(id, 'BUILDING', `[1/5] 📥 GitHub Pull
-- Connecting to GitHub repository...
-- Fetching latest code from branch 'main'...
-- Pulling commit sha: f8a3c2d [Update configurations]
-- GitHub Pull: Completed successfully.`);
+    // Helper to wrap log with timestamp
+    const withTimestamp = (msg) => `[${now()}] ${msg}`;
+
+    // 1. Pending → Building (GitHub Pull)
+    await updateDeploymentStatus(id, 'BUILDING', withTimestamp(`[1/5] 📥 GitHub Pull\n- Connecting to GitHub repository...\n- Fetching latest code from branch 'main'...\n- Pulling commit sha: f8a3c2d [Update configurations]\n- GitHub Pull: Completed successfully.`));
     await delay(2000);
+
+    // Random failure after step 1 (10% chance)
+    if (Math.random() < 0.1) throw new Error('GitHub Pull failed due to network issue');
 
     // 2. Building (Docker Build)
-    await updateDeploymentStatus(id, 'BUILDING', `[2/5] 🐳 Docker Build
-- Initializing Docker build context...
-- Step 1/5 : FROM node:18-alpine
----> Using cached image
-- Step 2/5 : WORKDIR /app
----> Using cached layer
-- Step 3/5 : COPY package*.json ./
----> Running in container...
-- Step 4/5 : RUN npm ci --omit=dev
----> Installing packages (this may take a few seconds)...
----> packages installed successfully.
-- Step 5/5 : COPY . .
----> Copying source files.
-- Exporting image layers...
-- Docker Build: Image build complete. Tagged as deployiq-app:latest`);
+    await updateDeploymentStatus(id, 'BUILDING', withTimestamp(`[2/5] 🐳 Docker Build\n- Initializing Docker build context...\n- Step 1/5 : FROM node:18-alpine\n---> Using cached image\n- Step 2/5 : WORKDIR /app\n---> Using cached layer\n- Step 3/5 : COPY package*.json ./\n---> Running in container...\n- Step 4/5 : RUN npm ci --omit=dev\n---> Installing packages (this may take a few seconds)...\n---> packages installed successfully.\n- Step 5/5 : COPY . .\n---> Copying source files.\n- Exporting image layers...\n- Docker Build: Image build complete. Tagged as deployiq-app:latest`));
     await delay(3000);
+    if (Math.random() < 0.1) throw new Error('Docker Build failed: missing Dockerfile');
 
     // 3. Running (Container Startup)
-    await updateDeploymentStatus(id, 'RUNNING', `[3/5] 🚀 Container Startup
-- Stopping existing container (if any)...
-- Creating container 'deployiq-user-app'...
-- Mounting persistent volumes...
-- Setting environment variables...
-- Container started successfully. ID: e8b9f1c7d24a
-- Port mapping: 3000 -> 80`);
+    await updateDeploymentStatus(id, 'RUNNING', withTimestamp(`[3/5] 🚀 Container Startup\n- Stopping existing container (if any)...\n- Creating container 'deployiq-user-app'...\n- Mounting persistent volumes...\n- Setting environment variables...\n- Container started successfully. ID: e8b9f1c7d24a\n- Port mapping: 3000 -> 80`));
     await delay(2000);
+    if (Math.random() < 0.1) throw new Error('Container startup failed: port conflict');
 
     // 4. Running (Health Check)
-    await updateDeploymentStatus(id, 'RUNNING', `[4/5] 🩺 Health Check
-- Querying service HTTP interface on port 3000...
-- Attempt 1/3: Connection refused (Server starting up)
-- Attempt 2/3: Status 200 OK
-- Health Check: Service is responding and healthy!`);
+    await updateDeploymentStatus(id, 'RUNNING', withTimestamp(`[4/5] 🩺 Health Check\n- Querying service HTTP interface on port 3000...\n- Attempt 1/3: Connection refused (Server starting up)\n- Attempt 2/3: Status 200 OK\n- Health Check: Service is responding and healthy!`));
     await delay(1500);
+    if (Math.random() < 0.1) throw new Error('Health check failed: endpoint not reachable');
 
     // 5. Success (Deployment Success)
-    await updateDeploymentStatus(id, 'SUCCESS', `[5/5] 🎉 Deployment Success
-- Routing configuration updated.
-- NGINX reload triggered.
-- Deployment completed successfully.
-- Your app is now live at: http://localhost:80`);
+    await updateDeploymentStatus(id, 'SUCCESS', withTimestamp(`[5/5] 🎉 Deployment Success\n- Routing configuration updated.\n- NGINX reload triggered.\n- Deployment completed successfully.\n- Your app is now live at: http://localhost:80`));
   } catch (error) {
     console.error('Deployment simulation failed:', error);
-    await updateDeploymentStatus(id, 'FAILED', `[FATAL ERROR] ❌ Deployment Pipeline Failed: ${error.message}`);
+    await updateDeploymentStatus(id, 'FAILED', withTimestamp(`[FATAL ERROR] ❌ Deployment Pipeline Failed: ${error.message}`));
   }
 };
