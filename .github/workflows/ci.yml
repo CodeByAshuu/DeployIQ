@@ -13,22 +13,53 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
 
+      # ------------------- Node / Frontend -------------------
       - name: Setup Node.js
         uses: actions/setup-node@v3
         with:
           node-version: '18'
+          cache: 'npm'
 
       - name: Install Frontend Dependencies
-        run: cd frontend && npm install
+        working-directory: ./frontend
+        run: npm ci
 
       - name: Build Frontend
-        run: cd frontend && npm run build
+        working-directory: ./frontend
+        run: npm run build
 
+      # ------------------- Backend (Auth Service) -------------------
+      - name: Install Backend Dependencies
+        working-directory: ./backend/auth-service
+        run: npm ci
+
+      - name: Generate Prisma Client
+        working-directory: ./backend/auth-service
+        run: npx prisma generate
+
+      # ------------------- Java / Analytics Service -------------------
       - name: Setup Java
         uses: actions/setup-java@v3
         with:
           java-version: '17'
           distribution: 'temurin'
+          cache: 'maven'
+
+      - name: Ensure Maven Wrapper Executable
+        working-directory: ./backend/analytics-service
+        run: chmod +x mvnw
 
       - name: Build Analytics Service
-        run: cd analytics-service && ./mvnw clean package -DskipTests
+        working-directory: ./backend/analytics-service
+        run: ./mvnw clean package -DskipTests
+
+      # ------------------- Docker Compose Validation -------------------
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
+      - name: Validate Docker Compose configuration
+        run: docker compose config
+
+      # ------------------- Optional: Docker Build (for CI verification) -------------------
+      - name: Build Docker Images
+        run: docker compose build
