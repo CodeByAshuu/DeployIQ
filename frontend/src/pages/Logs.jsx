@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useLocation } from 'react-router-dom';
 import { getDeployments, getDeployment } from '../services/deployment.js';
 import { listContainers, getContainerLogs } from '../services/docker.js';
@@ -24,23 +24,20 @@ export default function Logs() {
   
   const terminalEndRef = useRef(null);
 
-  // Initial load
-  useEffect(() => {
-    fetchMetadata();
-  }, []);
-
-  // Fetch log source lists
-  const fetchMetadata = async () => {
+  // Fetch log source lists — stable reference, runs once on mount
+  const fetchMetadata = useCallback(async () => {
+    let mounted = true;
     try {
-      const deploys = await getDeployments();
+      const [deploys, conts] = await Promise.all([getDeployments(), listContainers()]);
+      if (!mounted) return;
+
       setDeployments(deploys);
       if (deploys.length > 0) {
         setSelectedDeploymentId(deploys[0].id);
       }
 
-      const conts = await listContainers();
       setContainers(conts);
-      
+
       // If navigated from container monitoring page, auto-select it
       if (location.state?.containerId) {
         setLogSource('container');
@@ -50,25 +47,54 @@ export default function Logs() {
       }
     } catch (err) {
       console.error(err);
-      setError('Failed to fetch initial metadata list.');
+      if (mounted) setError('Failed to fetch initial metadata list.');
     }
-  };
+    return () => { mounted = false; };
+  }, [location.state?.containerId]);
 
-  // Poll log content
+  // Initial load — runs only once
   useEffect(() => {
-    let interval;
-    
-    // Initial fetch
-    fetchLogs(true);
+    fetchMetadata();
+  }, [fetchMetadata]);
 
-    if (autoRefresh) {
-      interval = setInterval(() => {
-        fetchLogs(true);
-      }, 3000);
+  // Fetch the active log stream — stable reference, re-created when source/selection changes
+  const fetchLogs = useCallback(async (silent = false) => {
+    if (logSource === 'deployment' && !selectedDeploymentId) return;
+    if (logSource === 'container' && !selectedContainerId) return;
+
+    let mounted = true;
+    try {
+      if (!silent && mounted) setIsLoading(true);
+      if (mounted) setError('');
+
+      if (logSource === 'deployment') {
+        const data = await getDeployment(selectedDeploymentId);
+        if (mounted) setLogs(data.logs || 'Initial state. Logs pending...\n');
+      } else {
+        const data = await getContainerLogs(selectedContainerId);
+        if (mounted) setLogs(data.logs || data || 'Docker container stream initialized. No standard output yet.\n');
+      }
+    } catch (err) {
+      console.error(err);
+      if (!silent && mounted) setError('Failed to retrieve log stream.');
+    } finally {
+      if (!silent && mounted) setIsLoading(false);
     }
+    return () => { mounted = false; };
+  }, [logSource, selectedDeploymentId, selectedContainerId]);
 
+  // Poll log content — re-registers interval when source/selection/autoRefresh changes
+  useEffect(() => {
+    // Async wrapper to call inside effect
+    const runFetch = () => { fetchLogs(true); };
+
+    runFetch(); // immediate fetch on mount / dependency change
+
+    if (!autoRefresh) return;
+
+    const interval = setInterval(runFetch, 3000);
     return () => clearInterval(interval);
-  }, [logSource, selectedDeploymentId, selectedContainerId, autoRefresh]);
+  }, [fetchLogs, autoRefresh]);
 
   // Scroll to bottom on new logs
   useEffect(() => {
@@ -77,34 +103,11 @@ export default function Logs() {
     }
   }, [logs]);
 
-  const fetchLogs = async (silent = false) => {
-    if (logSource === 'deployment' && !selectedDeploymentId) return;
-    if (logSource === 'container' && !selectedContainerId) return;
-
-    try {
-      if (!silent) setIsLoading(true);
-      setError('');
-      
-      if (logSource === 'deployment') {
-        const data = await getDeployment(selectedDeploymentId);
-        setLogs(data.logs || 'Initial state. Logs pending...\n');
-      } else {
-        const data = await getContainerLogs(selectedContainerId);
-        setLogs(data.logs || data || 'Docker container stream initialized. No standard output yet.\n');
-      }
-    } catch (err) {
-      console.error(err);
-      if (!silent) setError('Failed to retrieve log stream.');
-    } finally {
-      if (!silent) setIsLoading(false);
-    }
-  };
-
-  const handleSourceChange = (source) => {
+  const handleSourceChange = useCallback((source) => {
     setLogSource(source);
     setLogs('');
     setError('');
-  };
+  }, []);
 
   // Filter logs based on search query
   const filteredLogs = logs
@@ -126,7 +129,7 @@ export default function Logs() {
             </h1>
           </div>
           <p className="text-[11px] text-gray-500 mt-2">
-            Standard Output Multiplexer • Deployment & Container Stream Viewer
+            Standard Output Multiplexer • Deployment &amp; Container Stream Viewer
           </p>
         </div>
         

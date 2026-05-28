@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getDeployments, deleteDeployment } from '../services/deployment.js';
 
@@ -8,13 +8,7 @@ export default function Deployments() {
   const [error, setError] = useState('');
   const navigate = useNavigate();
 
-  useEffect(() => {
-    fetchDeployments();
-    const interval = setInterval(fetchDeployments, 5000); // Poll every 5 seconds
-    return () => clearInterval(interval);
-  }, []);
-
-  const fetchDeployments = async () => {
+  const fetchDeployments = useCallback(async () => {
     try {
       const data = await getDeployments();
       setDeployments(data);
@@ -25,19 +19,31 @@ export default function Deployments() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
 
-  const handleDelete = async (id, e) => {
+  useEffect(() => {
+    let mounted = true;
+    fetchDeployments();
+    const interval = setInterval(() => {
+      if (mounted) fetchDeployments();
+    }, 5000);
+    return () => {
+      mounted = false;
+      clearInterval(interval);
+    };
+  }, [fetchDeployments]);
+
+  const handleDelete = useCallback(async (id, e) => {
     e.stopPropagation();
     if (!window.confirm('Are you sure you want to delete this deployment record?')) return;
     try {
       await deleteDeployment(id);
-      setDeployments(deployments.filter((d) => d.id !== id));
+      setDeployments((prev) => prev.filter((d) => d.id !== id));
     } catch (err) {
       console.error(err);
       alert('Failed to delete deployment.');
     }
-  };
+  }, []);
 
   const getStatusBadge = (status) => {
     switch (status) {

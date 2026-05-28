@@ -1,9 +1,23 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext.jsx';
 import { getProjects } from '../services/project.js';
 import { getDeployments } from '../services/deployment.js';
 import { listContainers } from '../services/docker.js';
+import { getDashboardStats, getTrends, getStatusBreakdown } from '../services/analytics.js';
 import { Link } from 'react-router-dom';
+import {
+  AreaChart,
+  Area,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  PieChart,
+  Pie,
+  Cell,
+  Legend,
+} from 'recharts';
 
 export default function Dashboard() {
   const { user } = useAuth();
@@ -13,41 +27,86 @@ export default function Dashboard() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
 
+  // Analytics State
+  const [dashboardStats, setDashboardStats] = useState({
+    totalDeployments: 0,
+    successfulDeployments: 0,
+    failedDeployments: 0,
+    runningDeployments: 0,
+    averageDeploymentDuration: 0
+  });
+  const [trends, setTrends] = useState([]);
+  const [statusBreakdown, setStatusBreakdown] = useState({
+    successPercentage: 0,
+    failedPercentage: 0,
+    runningPercentage: 0,
+    pendingPercentage: 0
+  });
+
   useEffect(() => {
-    fetchTelemetryData();
+    let mounted = true;
+
+    const loadTelemetry = async () => {
+      try {
+        // 1. Fetch Core Projects
+        const projectsData = await getProjects();
+        if (!mounted) return;
+        setProjects(projectsData);
+
+        // 2. Fetch Containers
+        try {
+          const contsData = await listContainers();
+          if (mounted) setContainers(contsData);
+        } catch (err) {
+          console.warn('Failed to load Docker containers for dashboard', err);
+        }
+
+        // 3. Fetch Analytics microservice stats
+        try {
+          const statsData = await getDashboardStats();
+          if (mounted) setDashboardStats(statsData);
+        } catch (err) {
+          console.warn('Failed to load dashboard stats from analytics-service', err);
+        }
+
+        // 4. Fetch Analytics trends
+        try {
+          const trendsData = await getTrends();
+          if (mounted) setTrends(trendsData);
+        } catch (err) {
+          console.warn('Failed to load trends from analytics-service', err);
+        }
+
+        // 5. Fetch Analytics breakdown
+        try {
+          const breakdownData = await getStatusBreakdown();
+          if (mounted) setStatusBreakdown(breakdownData);
+        } catch (err) {
+          console.warn('Failed to load status breakdown from analytics-service', err);
+        }
+
+        // 6. Fetch raw deployments for table listing
+        try {
+          const deploysData = await getDeployments();
+          if (mounted) setDeployments(deploysData);
+        } catch (err) {
+          console.warn('Failed to load deployments for dashboard list', err);
+        }
+
+      } catch (err) {
+        console.error(err);
+        if (mounted) setError('Could not update telemetry stats.');
+      } finally {
+        if (mounted) setIsLoading(false);
+      }
+    };
+
+    loadTelemetry();
+
+    return () => { mounted = false; };
   }, []);
 
-  const fetchTelemetryData = async () => {
-    setIsLoading(true);
-    setError('');
-    try {
-      const projectsData = await getProjects();
-      setProjects(projectsData);
-
-      try {
-        const deploysData = await getDeployments();
-        setDeployments(deploysData);
-      } catch (err) {
-        console.warn('Failed to load deployments for dashboard', err);
-      }
-
-      try {
-        const contsData = await listContainers();
-        setContainers(contsData);
-      } catch (err) {
-        console.warn('Failed to load Docker containers for dashboard', err);
-      }
-    } catch (err) {
-      console.error(err);
-      setError('Could not update telemetry stats.');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
   const totalProjects = projects.length;
-  const successDeployments = deployments.filter((d) => d.status === 'SUCCESS').length;
-  const failedDeployments = deployments.filter((d) => d.status === 'FAILED').length;
   const runningContainers = containers.filter((c) => c.state === 'running').length;
 
   const recentProjects = [...projects]
@@ -57,6 +116,14 @@ export default function Dashboard() {
   const recentDeployments = [...deployments]
     .sort((a, b) => new Date(b.deployedAt) - new Date(a.deployedAt))
     .slice(0, 5);
+
+  // Recharts Pie Chart Formatter
+  const breakdownData = [
+    { name: 'Success', value: statusBreakdown.successPercentage, color: '#10b981' },
+    { name: 'Failed', value: statusBreakdown.failedPercentage, color: '#f43f5e' },
+    { name: 'Running', value: statusBreakdown.runningPercentage, color: '#38bdf8' },
+    { name: 'Pending', value: statusBreakdown.pendingPercentage, color: '#71717a' },
+  ].filter(item => item.value > 0);
 
   const getStatusBadge = (status) => {
     switch (status) {
@@ -99,7 +166,7 @@ export default function Dashboard() {
           <div className="flex items-center space-x-2">
             <span className="text-gray-500 font-bold">$</span>
             <h1 className="text-xl font-bold text-white tracking-wider">
-              systemctl status deployiq
+              systemctl status deployiq --telemetry
             </h1>
           </div>
           <p className="text-[11px] text-gray-500 mt-2">
@@ -113,12 +180,14 @@ export default function Dashboard() {
       </header>
 
       {/* Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-5">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-5">
         {[
-          { label: 'TOTAL PROJECTS', value: isLoading ? '...' : totalProjects, statusClass: 'status-success', desc: 'Registered campus services' },
-          { label: 'ACTIVE CONTAINERS', value: isLoading ? '...' : runningContainers, statusClass: 'status-info', desc: 'Running Docker containers' },
-          { label: 'SUCCESS DEPLOYS', value: isLoading ? '...' : successDeployments, statusClass: 'status-success', desc: 'Successful deployments' },
-          { label: 'FAILED PIPELINES', value: isLoading ? '...' : failedDeployments, statusClass: failedDeployments > 0 ? 'status-danger' : 'status-info', desc: 'Failed deployment attempts' }
+          { label: 'TOTAL PROJECTS', value: isLoading ? '...' : totalProjects, statusClass: 'status-success', desc: 'Campus services' },
+          { label: 'ACTIVE CONTAINERS', value: isLoading ? '...' : runningContainers, statusClass: 'status-info', desc: 'Running Dockers' },
+          { label: 'TOTAL RUNS', value: isLoading ? '...' : dashboardStats.totalDeployments, statusClass: 'status-info', desc: 'Total telemetry pipeline runs' },
+          { label: 'SUCCESS DEPLOYS', value: isLoading ? '...' : dashboardStats.successfulDeployments, statusClass: 'status-success', desc: 'Successful deployments' },
+          { label: 'FAILED PIPELINES', value: isLoading ? '...' : dashboardStats.failedDeployments, statusClass: dashboardStats.failedDeployments > 0 ? 'status-danger' : 'status-info', desc: 'Failed deployment attempts' },
+          { label: 'AVG PIPELINE SPEED', value: isLoading ? '...' : `${(dashboardStats.averageDeploymentDuration / 1000).toFixed(1)}s`, statusClass: 'status-success', desc: 'Average execution duration' }
         ].map((stat, idx) => (
           <div key={idx} className="devops-panel p-5 rounded-xl border devops-border flex flex-col justify-between h-32">
             <div className="flex justify-between items-start">
@@ -131,6 +200,129 @@ export default function Dashboard() {
             </div>
           </div>
         ))}
+      </div>
+
+      {/* Charts Grid */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Deployment Trends Chart */}
+        <div className="devops-panel p-5 rounded-xl border devops-border lg:col-span-2">
+          <div className="mb-4">
+            <h3 className="text-xs font-bold text-white uppercase tracking-wider flex items-center">
+              <span className="text-gray-600 mr-1.5">&gt;</span> Deployment Pipeline Trends
+            </h3>
+            <p className="text-[10px] text-gray-500 mt-0.5">Telemetry metrics grouped chronologically by day</p>
+          </div>
+          <div className="h-64 w-full">
+            {isLoading ? (
+              <div className="h-full flex items-center justify-center text-xs text-gray-500 animate-pulse">
+                Loading telemetry chart streams...
+              </div>
+            ) : trends.length === 0 ? (
+              <div className="h-full flex items-center justify-center text-xs text-gray-500">
+                No deployment trend data discovered.
+              </div>
+            ) : (
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={trends} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="colorTotal" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#38bdf8" stopOpacity={0.2}/>
+                      <stop offset="95%" stopColor="#38bdf8" stopOpacity={0}/>
+                    </linearGradient>
+                    <linearGradient id="colorSuccess" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#10b981" stopOpacity={0.2}/>
+                      <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
+                    </linearGradient>
+                    <linearGradient id="colorFailed" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#f43f5e" stopOpacity={0.2}/>
+                      <stop offset="95%" stopColor="#f43f5e" stopOpacity={0}/>
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid stroke="#222" strokeDasharray="3 3" />
+                  <XAxis dataKey="date" stroke="#6b7280" style={{ fontSize: 9, fontFamily: 'monospace' }} />
+                  <YAxis stroke="#6b7280" style={{ fontSize: 9, fontFamily: 'monospace' }} />
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: '#161616',
+                      borderColor: '#333',
+                      borderRadius: '8px',
+                      color: '#fff',
+                      fontSize: 10,
+                      fontFamily: 'monospace'
+                    }}
+                  />
+                  <Legend wrapperStyle={{ fontSize: 10, fontFamily: 'monospace', paddingTop: 10 }} />
+                  <Area name="Total Runs" type="monotone" dataKey="total" stroke="#38bdf8" fillOpacity={1} fill="url(#colorTotal)" strokeWidth={1.5} />
+                  <Area name="Successful" type="monotone" dataKey="success" stroke="#10b981" fillOpacity={1} fill="url(#colorSuccess)" strokeWidth={1.5} />
+                  <Area name="Failed" type="monotone" dataKey="failed" stroke="#f43f5e" fillOpacity={1} fill="url(#colorFailed)" strokeWidth={1.5} />
+                </AreaChart>
+              </ResponsiveContainer>
+            )}
+          </div>
+        </div>
+
+        {/* Status Allocation Breakdown (Donut Chart) */}
+        <div className="devops-panel p-5 rounded-xl border devops-border">
+          <div className="mb-4">
+            <h3 className="text-xs font-bold text-white uppercase tracking-wider flex items-center">
+              <span className="text-gray-600 mr-1.5">&gt;</span> Pipeline Status Breakdown
+            </h3>
+            <p className="text-[10px] text-gray-500 mt-0.5">Allocation share ratio of deployment states</p>
+          </div>
+          <div className="h-64 w-full flex flex-col justify-between items-center">
+            {isLoading ? (
+              <div className="h-full flex items-center justify-center text-xs text-gray-500 animate-pulse">
+                Analyzing breakdown ratio...
+              </div>
+            ) : breakdownData.length === 0 ? (
+              <div className="h-full flex items-center justify-center text-xs text-gray-500">
+                No ratio telemetry compiled.
+              </div>
+            ) : (
+              <>
+                <div className="h-44 w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={breakdownData}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={50}
+                        outerRadius={70}
+                        paddingAngle={3}
+                        dataKey="value"
+                      >
+                        {breakdownData.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={entry.color} />
+                        ))}
+                      </Pie>
+                      <Tooltip
+                        formatter={(value) => `${value}%`}
+                        contentStyle={{
+                          backgroundColor: '#161616',
+                          borderColor: '#333',
+                          borderRadius: '8px',
+                          color: '#fff',
+                          fontSize: 10,
+                          fontFamily: 'monospace'
+                        }}
+                      />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+                <div className="grid grid-cols-2 gap-x-6 gap-y-1.5 text-[9px] w-full px-2">
+                  {breakdownData.map((item, idx) => (
+                    <div key={idx} className="flex items-center space-x-2">
+                      <span className="w-2 h-2 rounded-full" style={{ backgroundColor: item.color }}></span>
+                      <span className="text-gray-400 font-bold uppercase">{item.name}:</span>
+                      <span className="text-white font-bold">{item.value}%</span>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+        </div>
       </div>
 
       {/* Recent Projects Table Panel */}

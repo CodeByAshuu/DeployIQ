@@ -46,11 +46,11 @@ jobs:
           cache: 'maven'
 
       - name: Ensure Maven Wrapper Executable
-        working-directory: ./backend/analytics-service
+        working-directory: ./analytics-service
         run: chmod +x mvnw
 
       - name: Build Analytics Service
-        working-directory: ./backend/analytics-service
+        working-directory: ./analytics-service
         run: ./mvnw clean package -DskipTests
 
       # ------------------- Docker Compose Validation -------------------

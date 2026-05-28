@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { listContainers, startContainer, stopContainer, restartContainer, getContainerDetails } from '../services/docker.js';
 
@@ -10,41 +10,59 @@ export default function Monitoring() {
   const [error, setError] = useState('');
   const [actioningId, setActioningId] = useState(null);
 
-  useEffect(() => {
-    fetchContainers();
-    const interval = setInterval(fetchContainers, 5000);
-    return () => clearInterval(interval);
-  }, []);
-
-  const fetchContainers = async () => {
+  const fetchContainers = useCallback(async () => {
+    let mounted = true;
     try {
       const data = await listContainers();
+      if (!mounted) return;
       setContainers(data);
       setError('');
 
-      // Fetch stats for all running containers asynchronously
-      data.forEach(async (c) => {
-        if (c.state === 'running') {
+      // Batch-fetch stats for all running containers in parallel
+      const runningContainers = data.filter((c) => c.state === 'running');
+      const statsResults = await Promise.all(
+        runningContainers.map(async (c) => {
           try {
             const stats = await getContainerDetails(c.id);
-            setContainerStats((prev) => ({
-              ...prev,
-              [c.id]: stats,
-            }));
+            return { id: c.id, stats };
           } catch (err) {
             console.error(`Failed to fetch stats for ${c.id}:`, err);
+            return { id: c.id, stats: { error: true } };
           }
-        }
+        })
+      );
+
+      if (!mounted) return;
+      setContainerStats((prev) => {
+        const next = { ...prev };
+        statsResults.forEach(({ id, stats }) => {
+          next[id] = stats;
+        });
+        return next;
       });
     } catch (err) {
       console.error(err);
-      setError('Could not establish connection with Docker daemon socket.');
+      if (mounted) setError('Could not establish connection with Docker daemon socket.');
     } finally {
-      setIsLoading(false);
+      if (mounted) setIsLoading(false);
     }
-  };
 
-  const handleAction = async (id, action) => {
+    return () => { mounted = false; };
+  }, []);
+
+  useEffect(() => {
+    let mounted = true;
+    fetchContainers();
+    const interval = setInterval(() => {
+      if (mounted) fetchContainers();
+    }, 5000);
+    return () => {
+      mounted = false;
+      clearInterval(interval);
+    };
+  }, [fetchContainers]);
+
+  const handleAction = useCallback(async (id, action) => {
     setActioningId(id);
     try {
       if (action === 'start') {
@@ -61,7 +79,7 @@ export default function Monitoring() {
     } finally {
       setActioningId(null);
     }
-  };
+  }, [fetchContainers]);
 
   const runningContainers = containers.filter((c) => c.state === 'running').length;
   const stoppedContainers = containers.filter((c) => c.state !== 'running').length;
