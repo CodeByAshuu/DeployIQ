@@ -25,6 +25,11 @@ export const restartContainer = async (id) => {
   return response.data;
 };
 
+export const removeContainer = async (id) => {
+  const response = await api.delete(`/docker/containers/${id}`);
+  return response.data;
+};
+
 export const getContainerLogs = async (id) => {
   const response = await api.get(`/docker/containers/${id}/logs`);
   return response.data;

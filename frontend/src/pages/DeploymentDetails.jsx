@@ -83,23 +83,20 @@ export default function DeploymentDetails() {
   const inProgress = ['PENDING', 'BUILDING', 'RUNNING'].includes(deployment.status);
 
   // Parse logs to detect active steps for timeline indicators
-  const hasGit = deployment.logs?.includes('GitHub Pull');
-  const gitSuccess = deployment.logs?.includes('GitHub Pull: Completed successfully.');
-  const hasDocker = deployment.logs?.includes('Docker Build');
-  const dockerSuccess = deployment.logs?.includes('Docker Build: Image build complete.');
-  const hasContainer = deployment.logs?.includes('Container Startup');
-  const containerSuccess = deployment.logs?.includes('Container started successfully.');
-  const hasHealth = deployment.logs?.includes('Health Check');
-  const healthSuccess = deployment.logs?.includes('Health Check: Service is responding and healthy!');
+  const hasGit = deployment.logs?.includes('Preparing to clone repository');
+  const gitSuccess = deployment.logs?.includes('Repository cloned successfully');
+  const hasDocker = deployment.logs?.includes('Detecting project type');
+  const dockerSuccess = deployment.logs?.includes('Initiating Docker build');
+  const hasContainer = deployment.logs?.includes('Allocating port and creating container');
+  const containerSuccess = deployment.logs?.includes('Container started successfully');
   const hasSuccess = deployment.status === 'SUCCESS';
   const hasFailed = deployment.status === 'FAILED';
 
   const steps = [
-    { title: 'GitHub Pull', active: hasGit, success: gitSuccess, desc: 'Clone repository & fetch code' },
-    { title: 'Docker Build', active: hasDocker, success: dockerSuccess, desc: 'Build image from Dockerfile' },
-    { title: 'Container Startup', active: hasContainer, success: containerSuccess, desc: 'Spin up container instances' },
-    { title: 'Health Check', active: hasHealth, success: healthSuccess, desc: 'Verify app responsiveness' },
-    { title: 'Release Success', active: hasSuccess, success: hasSuccess, failed: hasFailed, desc: 'App is routing live traffic' },
+    { title: 'Clone Repository', active: hasGit, success: gitSuccess, desc: 'Fetch code from GitHub' },
+    { title: 'Build Project', active: hasDocker, success: dockerSuccess, desc: 'Generate Dockerfile & build image' },
+    { title: 'Start Container', active: hasContainer, success: containerSuccess, desc: 'Allocate port and run' },
+    { title: 'Release Success', active: hasSuccess, success: hasSuccess, failed: hasFailed, desc: 'App is running live' },
   ];
 
   // Compute progress percentage for UI
@@ -150,9 +147,9 @@ export default function DeploymentDetails() {
                 SUCCESS
               </span>
             )}
-            {deployment.status === 'BUILDING' && (
+            {(deployment.status === 'BUILDING' || deployment.status === 'CLONING' || deployment.status === 'STARTING') && (
               <span className="px-2.5 py-0.5 rounded text-[10px] font-bold bg-amber-950 border border-amber-500/30 text-amber-400 animate-pulse">
-                BUILDING
+                {deployment.status}
               </span>
             )}
             {deployment.status === 'RUNNING' && (

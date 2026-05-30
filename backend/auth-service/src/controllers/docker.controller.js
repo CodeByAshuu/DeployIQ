@@ -64,6 +64,18 @@ export const restart = async (req, res, next) => {
   }
 };
 
+export const remove = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const result = await dockerService.removeContainer(id);
+    logAction('Remove container', `id=${id}`);
+    res.status(200).json(result);
+  } catch (error) {
+    console.error('Docker remove error:', error);
+    next(error);
+  }
+};
+
 export const getLogs = async (req, res, next) => {
   try {
     const { id } = req.params;

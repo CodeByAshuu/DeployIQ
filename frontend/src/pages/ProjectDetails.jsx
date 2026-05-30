@@ -1,56 +1,41 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { getProject, deleteProject } from '../services/project.js';
-import { createDeployment, triggerDeployment } from '../services/deployment.js';
+import { createDeployment, triggerDeployment, getProjectDeployments } from '../services/deployment.js';
+import { stopContainer, restartContainer, removeContainer } from '../services/docker.js';
 
 export default function ProjectDetails() {
   const { id } = useParams();
   const navigate = useNavigate();
   const [project, setProject] = useState(null);
+  const [activeDeployment, setActiveDeployment] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
-  const [simulatedLogs, setSimulatedLogs] = useState([]);
   const [isDeploying, setIsDeploying] = useState(false);
+  const [actionLoading, setActionLoading] = useState(false);
 
   useEffect(() => {
-    fetchProject();
+    fetchProjectAndDeployments();
   }, [id]);
 
-  useEffect(() => {
-    if (project) {
-      // Simulate microservice telemetry logs
-      const messages = [
-        `[INFO] Starting telemetry polling for target service key [${project.name}]`,
-        `[INFO] Querying system clusters on node [campus-docker-daemon]`,
-        `[OK] Connected to source repository repository: ${project.githubRepo}`,
-        `[OK] Health check status: ${project.deploymentStatus}`,
-        `[INFO] Active port assignments: local proxy routing configured on NGINX`,
-        `[INFO] Telemetry active. Awaiting manual campus deployment trigger.`,
-      ];
-      
-      let logIndex = 0;
-      const interval = setInterval(() => {
-        if (logIndex < messages.length) {
-          setSimulatedLogs((prev) => [...prev, `${new Date().toLocaleTimeString()} ${messages[logIndex]}`]);
-          logIndex++;
-        } else {
-          clearInterval(interval);
-        }
-      }, 800);
-
-      return () => clearInterval(interval);
-    }
-  }, [project]);
-
-  const fetchProject = async () => {
+  const fetchProjectAndDeployments = async () => {
     setIsLoading(true);
     setError('');
     try {
-      const data = await getProject(id);
-      setProject(data);
+      const projectData = await getProject(id);
+      setProject(projectData);
+      
+      const deploymentsData = await getProjectDeployments(id);
+      if (deploymentsData && deploymentsData.length > 0) {
+        // Find the latest deployment that is running or success
+        const active = deploymentsData.find(d => d.runtimeStatus === 'RUNNING') || deploymentsData[0];
+        setActiveDeployment(active);
+      } else {
+        setActiveDeployment(null);
+      }
     } catch (err) {
       console.error(err);
-      setError(err.response?.data?.error || 'Failed to fetch project telemetry logs.');
+      setError(err.response?.data?.error || 'Failed to fetch project details.');
     } finally {
       setIsLoading(false);
     }
@@ -82,16 +67,43 @@ export default function ProjectDetails() {
     }
   };
 
+  const handleContainerAction = async (action) => {
+    if (!activeDeployment || !activeDeployment.containerId) return;
+    
+    setActionLoading(true);
+    try {
+      if (action === 'stop') {
+        await stopContainer(activeDeployment.containerId);
+      } else if (action === 'restart') {
+        await restartContainer(activeDeployment.containerId);
+      } else if (action === 'remove') {
+        if (window.confirm('Are you sure you want to remove this active container?')) {
+          await removeContainer(activeDeployment.containerId);
+        }
+      }
+      // Refresh state
+      await fetchProjectAndDeployments();
+    } catch (err) {
+      console.error(err);
+      alert(err.response?.data?.error || `Failed to ${action} container.`);
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
   const getStatusBadge = (status) => {
     switch (status) {
       case 'SUCCESS':
+      case 'RUNNING':
         return (
           <span className="inline-flex items-center px-3 py-1 rounded-full border border-emerald-950 bg-emerald-950/20 text-emerald-400 text-xs font-bold tracking-wide uppercase">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-2 shadow-[0_0_6px_#10b981]"></span>
-            Active / Success
+            Active / Running
           </span>
         );
       case 'DEPLOYING':
+      case 'BUILDING':
+      case 'STARTING':
         return (
           <span className="inline-flex items-center px-3 py-1 rounded-full border border-amber-950 bg-amber-950/20 text-amber-400 text-xs font-bold tracking-wide uppercase animate-pulse">
             <span className="w-1.5 h-1.5 rounded-full bg-amber-500 mr-2 shadow-[0_0_6px_#f59e0b]"></span>
@@ -103,6 +115,13 @@ export default function ProjectDetails() {
           <span className="inline-flex items-center px-3 py-1 rounded-full border border-rose-950 bg-rose-950/20 text-rose-400 text-xs font-bold tracking-wide uppercase">
             <span className="w-1.5 h-1.5 rounded-full bg-rose-500 mr-2 shadow-[0_0_6px_#f43f5e]"></span>
             Failed
+          </span>
+        );
+      case 'STOPPED':
+        return (
+          <span className="inline-flex items-center px-3 py-1 rounded-full border border-zinc-900 bg-zinc-900/40 text-zinc-400 text-xs font-bold tracking-wide uppercase">
+            <span className="w-1.5 h-1.5 rounded-full bg-zinc-500 mr-2"></span>
+            Stopped
           </span>
         );
       default:
@@ -153,7 +172,7 @@ export default function ProjectDetails() {
       {isLoading ? (
         <div className="py-20 flex flex-col items-center justify-center space-y-4">
           <div className="w-8 h-8 border-2 border-white/10 border-t-white rounded-full animate-spin"></div>
-          <span className="text-xs text-gray-500 uppercase tracking-widest animate-pulse">Running telemetry scan...</span>
+          <span className="text-xs text-gray-500 uppercase tracking-widest animate-pulse">Scanning node status...</span>
         </div>
       ) : error ? (
         <div className="p-4 bg-red-950/10 border border-red-900/30 rounded-lg text-red-400 flex flex-col space-y-2 max-w-xl">
@@ -162,10 +181,10 @@ export default function ProjectDetails() {
           </div>
           <p>{error}</p>
           <button
-            onClick={fetchProject}
+            onClick={fetchProjectAndDeployments}
             className="self-start text-[10px] underline hover:text-red-300 font-semibold"
           >
-            Retry Telemetry Connection
+            Retry Connection
           </button>
         </div>
       ) : (
@@ -180,7 +199,7 @@ export default function ProjectDetails() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-1">
                   <div className="text-[10px] text-gray-500 uppercase font-bold">Node Status</div>
-                  <div>{getStatusBadge(project.deploymentStatus)}</div>
+                  <div>{getStatusBadge(activeDeployment ? activeDeployment.runtimeStatus || activeDeployment.status : project.deploymentStatus)}</div>
                 </div>
 
                 <div className="space-y-1">
@@ -209,8 +228,8 @@ export default function ProjectDetails() {
                 </div>
 
                 <div className="space-y-1">
-                  <div className="text-[10px] text-gray-500 uppercase font-bold">Telemetry Logs Polled</div>
-                  <div className="text-gray-300">{simulatedLogs.length} items</div>
+                  <div className="text-[10px] text-gray-500 uppercase font-bold">Active Deployment</div>
+                  <div className="text-gray-300">{activeDeployment ? activeDeployment.id : 'None'}</div>
                 </div>
               </div>
 
@@ -224,24 +243,67 @@ export default function ProjectDetails() {
               )}
             </div>
 
-            {/* Simulated Live Console Logs */}
-            <div className="bg-[#242424] border border-white/5 rounded-lg overflow-hidden flex flex-col h-[320px]">
+            {/* Container Control Panel */}
+            <div className="bg-[#242424] border border-white/5 rounded-lg overflow-hidden flex flex-col">
               <div className="bg-[#1f1f1f] px-5 py-3 border-b border-white/5 flex items-center justify-between shrink-0">
                 <div className="flex items-center space-x-2">
-                  <span className="w-1.5 h-1.5 rounded-full bg-yellow-500 shadow-[0_0_4px_#f59e0b]"></span>
-                  <span className="text-[10px] font-bold text-white uppercase tracking-wider">Live System Console Telemetry</span>
+                  <span className="text-[10px] font-bold text-white uppercase tracking-wider">Active Container Controls</span>
                 </div>
-                <div className="text-[9px] text-gray-500 uppercase">tty: dev/ports</div>
               </div>
-              <div className="flex-1 bg-[#181818] p-5 overflow-auto space-y-1 text-zinc-400 font-mono text-[10px] leading-relaxed">
-                {simulatedLogs.length === 0 ? (
-                  <div className="text-gray-600 animate-pulse">[i] Initializing terminal streams...</div>
-                ) : (
-                  simulatedLogs.map((log, index) => (
-                    <div key={index} className="whitespace-pre-wrap font-mono">
-                      <span className="text-gray-600">sys@iq-console:~$</span> {log}
+              <div className="p-5 space-y-4">
+                {activeDeployment && activeDeployment.containerId ? (
+                  <div className="space-y-4">
+                    <div className="flex flex-col space-y-2">
+                      <div className="flex items-center justify-between text-[10px] text-gray-400">
+                        <span>Container ID</span>
+                        <span className="font-mono text-white">{activeDeployment.containerId.substring(0, 12)}</span>
+                      </div>
+                      <div className="flex items-center justify-between text-[10px] text-gray-400">
+                        <span>Image Name</span>
+                        <span className="font-mono text-white">{activeDeployment.imageName}</span>
+                      </div>
+                      <div className="flex items-center justify-between text-[10px] text-gray-400">
+                        <span>Host Port</span>
+                        <span className="font-mono text-emerald-400">{activeDeployment.assignedPort}</span>
+                      </div>
                     </div>
-                  ))
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-2 pt-2 border-t border-white/5">
+                      {activeDeployment.deploymentUrl && (
+                        <a 
+                          href={activeDeployment.deploymentUrl} 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="text-center bg-blue-950/40 hover:bg-blue-900 border border-blue-500/30 text-blue-400 py-1.5 rounded text-[10px] font-bold uppercase transition-colors"
+                        >
+                          Open App
+                        </a>
+                      )}
+                      <button 
+                        onClick={() => navigate(`/deployments/${activeDeployment.id}`)}
+                        className="bg-zinc-800 hover:bg-zinc-700 border border-white/10 text-white py-1.5 rounded text-[10px] font-bold uppercase transition-colors"
+                      >
+                        Logs
+                      </button>
+                      <button 
+                        onClick={() => handleContainerAction('restart')}
+                        disabled={actionLoading}
+                        className="bg-amber-950/40 hover:bg-amber-900 border border-amber-500/30 text-amber-400 py-1.5 rounded text-[10px] font-bold uppercase transition-colors disabled:opacity-50"
+                      >
+                        Restart
+                      </button>
+                      <button 
+                        onClick={() => handleContainerAction('stop')}
+                        disabled={actionLoading}
+                        className="bg-rose-950/40 hover:bg-rose-900 border border-rose-500/30 text-rose-400 py-1.5 rounded text-[10px] font-bold uppercase transition-colors disabled:opacity-50"
+                      >
+                        Stop
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-gray-500 text-center py-6">
+                    No active container found for this project. Trigger a deploy to create one.
+                  </div>
                 )}
               </div>
             </div>
@@ -258,25 +320,25 @@ export default function ProjectDetails() {
                 <div className="flex items-center justify-between">
                   <span className="text-gray-500">Node Connections</span>
                   <span className="text-white font-bold bg-[#1a1a1a] border border-white/10 px-2 py-0.5 rounded text-[10px]">
-                    1/1 Active
+                    {activeDeployment && activeDeployment.runtimeStatus === 'RUNNING' ? '1/1 Active' : '0/1 Active'}
                   </span>
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-gray-500">Pipeline State</span>
                   <span className="text-white font-bold bg-[#1a1a1a] border border-white/10 px-2 py-0.5 rounded text-[10px]">
-                    Idle
+                    {project.deploymentStatus}
                   </span>
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-gray-500">Docker Network</span>
                   <span className="text-white font-bold bg-[#1a1a1a] border border-white/10 px-2 py-0.5 rounded text-[10px]">
-                    iq-campus-bridge
+                    deployiq-bridge
                   </span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-gray-500">Campus Memory Limit</span>
+                  <span className="text-gray-500">Runtime Allocation</span>
                   <span className="text-white font-bold bg-[#1a1a1a] border border-white/10 px-2 py-0.5 rounded text-[10px]">
-                    512 MB
+                    Dynamic
                   </span>
                 </div>
               </div>

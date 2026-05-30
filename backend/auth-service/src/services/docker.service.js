@@ -108,6 +108,21 @@ export const restartContainer = async (id) => {
   }
 };
 
+export const removeContainer = async (id) => {
+  try {
+    const container = docker.getContainer(id);
+    const info = await container.inspect();
+    if (info && info.State.Running) {
+      await container.stop();
+    }
+    await container.remove();
+    return { message: 'Container removed successfully' };
+  } catch (error) {
+    console.error(`Docker removeContainer error for ${id}:`, error);
+    throw new Error(`Failed to remove container: ${error.message}`);
+  }
+};
+
 export const getContainerLogs = async (id) => {
   try {
     const container = docker.getContainer(id);

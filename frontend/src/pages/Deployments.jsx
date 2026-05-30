@@ -54,11 +54,13 @@ export default function Deployments() {
             SUCCESS
           </span>
         );
+      case 'CLONING':
       case 'BUILDING':
+      case 'STARTING':
         return (
           <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-amber-950 border border-amber-500/30 text-amber-400 animate-pulse">
             <span className="w-1.5 h-1.5 rounded-full bg-amber-500 mr-1.5 shadow-[0_0_6px_#f59e0b]"></span>
-            BUILDING
+            {status}
           </span>
         );
       case 'RUNNING':

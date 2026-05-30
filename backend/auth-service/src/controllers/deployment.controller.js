@@ -100,14 +100,14 @@ export const triggerDeploy = async (req, res, next) => {
       return res.status(404).json({ error: 'Deployment not found or access denied' });
     }
 
-    logAction('Trigger deploy simulation', `id=${id}`);
+    logAction('Trigger deploy pipeline', `id=${id}`);
 
-    // Fire and forget the simulation in the background
-    deploymentService.runDeploymentSimulation(id).catch((err) => {
-      console.error(`Error running deployment simulation for ${id}:`, err);
+    // Fire and forget the pipeline in the background
+    deploymentService.runDeploymentPipeline(id).catch((err) => {
+      console.error(`Error running deployment pipeline for ${id}:`, err);
     });
 
-    res.status(202).json({ message: 'Deployment simulation started', deploymentId: id });
+    res.status(202).json({ message: 'Deployment pipeline started', deploymentId: id });
   } catch (error) {
     console.error('Trigger deploy error:', error);
     next(error);

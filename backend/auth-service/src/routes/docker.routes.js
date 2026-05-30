@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { list, getDetails, start, stop, restart, getLogs } from '../controllers/docker.controller.js';
+import { list, getDetails, start, stop, restart, remove, getLogs } from '../controllers/docker.controller.js';
 import { authenticate } from '../middlewares/auth.middleware.js';
 
 const router = Router();
@@ -18,6 +18,7 @@ router.get('/containers/:id', getDetails);
 router.post('/containers/:id/start', start);
 router.post('/containers/:id/stop', stop);
 router.post('/containers/:id/restart', restart);
+router.delete('/containers/:id', remove);
 router.get('/containers/:id/logs', getLogs);
 
 export default router;

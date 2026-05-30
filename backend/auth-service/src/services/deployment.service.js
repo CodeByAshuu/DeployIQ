@@ -73,7 +73,7 @@ export const getDeploymentById = async (id, ownerId) => {
   });
 };
 
-export const updateDeploymentStatus = async (id, status, extraLogs = '') => {
+export const updateDeploymentStatus = async (id, status, extraLogs = '', metadata = {}) => {
   const deployment = await prisma.deployment.findUnique({
     where: { id },
   });
@@ -82,7 +82,7 @@ export const updateDeploymentStatus = async (id, status, extraLogs = '') => {
     throw new Error('Deployment not found');
   }
 
-  const updatedLogs = deployment.logs + extraLogs + '\n';
+  const updatedLogs = deployment.logs ? deployment.logs + extraLogs + '\n' : extraLogs + '\n';
 
   // Update deployment status
   const updatedDeployment = await prisma.deployment.update({
@@ -90,6 +90,7 @@ export const updateDeploymentStatus = async (id, status, extraLogs = '') => {
     data: {
       status,
       logs: updatedLogs,
+      ...metadata,
       // Record duration when completing
       ...(status === 'SUCCESS' || status === 'FAILED'
         ? { durationMs: Math.floor((new Date() - deployment.deployedAt) / 1000) }
@@ -132,41 +133,111 @@ export const deleteDeployment = async (id, ownerId) => {
   });
 };
 
-// Simulation pipeline logic
-export const runDeploymentSimulation = async (id) => {
-  const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+// Real deployment pipeline logic
+export const runDeploymentPipeline = async (id) => {
   const now = () => new Date().toLocaleTimeString();
+  
+  // Helper to wrap log with timestamp
+  const withTimestamp = (msg) => `[${now()}] ${msg}`;
+  const logToDb = async (status, msg) => {
+    await updateDeploymentStatus(id, status, withTimestamp(msg));
+  };
 
   try {
-    // Helper to wrap log with timestamp
-    const withTimestamp = (msg) => `[${now()}] ${msg}`;
+    const deployment = await prisma.deployment.findUnique({
+      where: { id },
+      include: { project: true }
+    });
 
-    // 1. Pending → Building (GitHub Pull)
-    await updateDeploymentStatus(id, 'BUILDING', withTimestamp(`[1/5] 📥 GitHub Pull\n- Connecting to GitHub repository...\n- Fetching latest code from branch 'main'...\n- Pulling commit sha: f8a3c2d [Update configurations]\n- GitHub Pull: Completed successfully.`));
-    await delay(2000);
+    if (!deployment) throw new Error('Deployment record not found');
+    
+    const projectId = deployment.projectId;
+    const repoUrl = deployment.project.githubRepo;
+    
+    // 1. Pending -> Cloning
+    await logToDb('CLONING', `[1/4] 📥 Preparing to clone repository: ${repoUrl}`);
+    const { cloneRepository } = await import('./git.service.js');
+    const sourcePath = await cloneRepository(repoUrl, projectId, async (msg) => {
+      await logToDb('CLONING', msg);
+    });
 
-    // Random failure after step 1 (10% chance)
-    if (Math.random() < 0.1) throw new Error('GitHub Pull failed due to network issue');
+    // 2. Cloning -> Building
+    await logToDb('BUILDING', `[2/4] 🐳 Detecting project type and preparing build...`);
+    const fs = await import('fs/promises');
+    const path = await import('path');
+    
+    const files = await fs.readdir(sourcePath);
+    const hasDockerfile = files.includes('Dockerfile');
+    const hasPackageJson = files.includes('package.json');
+    const hasIndexHtml = files.includes('index.html');
+    
+    let targetPort = 80;
+    
+    if (hasDockerfile) {
+      await logToDb('BUILDING', `Project type: Custom Dockerfile detected.`);
+      // We'll assume a standard web port like 80 or 3000, let's stick to 80 or user can configure later.
+      // But we publish all ports in the container logic so it's fine.
+    } else if (hasPackageJson) {
+      await logToDb('BUILDING', `Project type: Node.js detected. Generating temporary Dockerfile...`);
+      targetPort = 3000;
+      const dockerfileContent = `
+        FROM node:18-alpine
+        WORKDIR /app
+        COPY package*.json ./
+        RUN npm install
+        COPY . .
+        EXPOSE 3000
+        CMD ["npm", "start"]
+      `;
+      await fs.writeFile(path.join(sourcePath, 'Dockerfile'), dockerfileContent.trim());
+      await logToDb('BUILDING', `Temporary Dockerfile created successfully.`);
+    } else if (hasIndexHtml) {
+      await logToDb('BUILDING', `Project type: Static HTML detected. Generating temporary Dockerfile...`);
+      targetPort = 80;
+      const dockerfileContent = `
+        FROM nginx:alpine
+        COPY . /usr/share/nginx/html
+        EXPOSE 80
+      `;
+      await fs.writeFile(path.join(sourcePath, 'Dockerfile'), dockerfileContent.trim());
+      await logToDb('BUILDING', `Temporary Dockerfile created successfully.`);
+    } else {
+      throw new Error('Unsupported project structure. Missing Dockerfile, package.json, or index.html.');
+    }
+    
+    const { buildImage, createAndStartContainer } = await import('./containerManager.service.js');
+    const imageName = \`deployiq-project-\${projectId.slice(0,8)}:latest\`;
+    
+    await logToDb('BUILDING', `Initiating Docker build for image: ${imageName}...`);
+    await buildImage(sourcePath, imageName, async (msg) => {
+      await logToDb('BUILDING', msg);
+    });
+    
+    // 3. Building -> Starting
+    await logToDb('STARTING', `[3/4] 🚀 Allocating port and creating container...`);
+    const { getAvailablePort } = await import('./portManager.service.js');
+    const assignedPort = await getAvailablePort();
+    await logToDb('STARTING', `Allocated host port: ${assignedPort}`);
+    
+    const containerName = \`deployiq-container-\${projectId.slice(0,8)}\`;
+    const containerId = await createAndStartContainer(imageName, assignedPort, containerName, targetPort, async (msg) => {
+      await logToDb('STARTING', msg);
+    });
+    
+    // 4. Starting -> Running / Success
+    const deploymentUrl = \`http://localhost:\${assignedPort}\`;
+    await logToDb('SUCCESS', `[4/4] 🎉 Deployment Success! Container is running.`);
+    await updateDeploymentStatus(id, 'SUCCESS', withTimestamp(`App is now live at: ${deploymentUrl}`), {
+      containerId,
+      imageName,
+      assignedPort,
+      deploymentUrl,
+      runtimeStatus: 'RUNNING',
+      startedAt: new Date()
+    });
 
-    // 2. Building (Docker Build)
-    await updateDeploymentStatus(id, 'BUILDING', withTimestamp(`[2/5] 🐳 Docker Build\n- Initializing Docker build context...\n- Step 1/5 : FROM node:18-alpine\n---> Using cached image\n- Step 2/5 : WORKDIR /app\n---> Using cached layer\n- Step 3/5 : COPY package*.json ./\n---> Running in container...\n- Step 4/5 : RUN npm ci --omit=dev\n---> Installing packages (this may take a few seconds)...\n---> packages installed successfully.\n- Step 5/5 : COPY . .\n---> Copying source files.\n- Exporting image layers...\n- Docker Build: Image build complete. Tagged as deployiq-app:latest`));
-    await delay(3000);
-    if (Math.random() < 0.1) throw new Error('Docker Build failed: missing Dockerfile');
-
-    // 3. Running (Container Startup)
-    await updateDeploymentStatus(id, 'RUNNING', withTimestamp(`[3/5] 🚀 Container Startup\n- Stopping existing container (if any)...\n- Creating container 'deployiq-user-app'...\n- Mounting persistent volumes...\n- Setting environment variables...\n- Container started successfully. ID: e8b9f1c7d24a\n- Port mapping: 3000 -> 80`));
-    await delay(2000);
-    if (Math.random() < 0.1) throw new Error('Container startup failed: port conflict');
-
-    // 4. Running (Health Check)
-    await updateDeploymentStatus(id, 'RUNNING', withTimestamp(`[4/5] 🩺 Health Check\n- Querying service HTTP interface on port 3000...\n- Attempt 1/3: Connection refused (Server starting up)\n- Attempt 2/3: Status 200 OK\n- Health Check: Service is responding and healthy!`));
-    await delay(1500);
-    if (Math.random() < 0.1) throw new Error('Health check failed: endpoint not reachable');
-
-    // 5. Success (Deployment Success)
-    await updateDeploymentStatus(id, 'SUCCESS', withTimestamp(`[5/5] 🎉 Deployment Success\n- Routing configuration updated.\n- NGINX reload triggered.\n- Deployment completed successfully.\n- Your app is now live at: http://localhost:80`));
   } catch (error) {
-    console.error('Deployment simulation failed:', error);
-    await updateDeploymentStatus(id, 'FAILED', withTimestamp(`[FATAL ERROR] ❌ Deployment Pipeline Failed: ${error.message}`));
+    console.error('Deployment pipeline failed:', error);
+    await logToDb('FAILED', `[FATAL ERROR] ❌ Deployment Pipeline Failed: ${error.message}`);
   }
 };

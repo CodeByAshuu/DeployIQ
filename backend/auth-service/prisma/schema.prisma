@@ -45,22 +45,36 @@ model Project {
 
 enum DeploymentStatus {
   PENDING
+  CLONING
   BUILDING
+  STARTING
   RUNNING
   SUCCESS
   FAILED
+  STOPPED
 }
 
 model Deployment {
-  id         String          @id @default(uuid())
-  status     DeploymentStatus @default(PENDING)
-  imageTag   String?
-  logs       String?         @db.Text
-  deployedBy String
-  deployedByUser User          @relation("UserDeployments", fields: [deployedBy], references: [id], onDelete: Cascade)
-  projectId  String
-  project    Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  deployedAt DateTime        @default(now())
-  updatedAt  DateTime        @updatedAt
-  durationMs Int? @default(0)
+  id            String           @id @default(uuid())
+  status        DeploymentStatus @default(PENDING)
+  imageTag      String?
+  logs          String?          @db.Text
+  buildLogs     String?          @db.Text
+  deployedBy    String
+  deployedByUser User            @relation("UserDeployments", fields: [deployedBy], references: [id], onDelete: Cascade)
+  projectId     String
+  project       Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  
+  // Real Deployment Engine Fields
+  containerId   String?
+  imageName     String?
+  assignedPort  Int?
+  deploymentUrl String?
+  runtimeStatus String?          @default("STOPPED")
+  
+  startedAt     DateTime?
+  stoppedAt     DateTime?
+  deployedAt    DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+  durationMs    Int?             @default(0)
 }
