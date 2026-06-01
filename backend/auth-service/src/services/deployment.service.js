@@ -17,27 +17,42 @@ const getHostProjectPath = (projectId) => {
   return `${HOST_WORKSPACE_ROOT}/deployments/${projectId}/source`;
 };
 
-const verifyHealth = async (port) => {
-  await new Promise(resolve => setTimeout(resolve, 4000));
-  return new Promise((resolve) => {
-    const socket = new net.Socket();
-    const timeout = setTimeout(() => {
-      socket.destroy();
-      resolve(false);
-    }, 3000);
-    
-    socket.connect(port, 'host.docker.internal', () => {
-      clearTimeout(timeout);
-      socket.destroy();
-      resolve(true);
-    });
-    
-    socket.on('error', () => {
-      clearTimeout(timeout);
-      socket.destroy();
-      resolve(false);
-    });
-  });
+const verifyHealth = async (port, onLog = () => {}) => {
+  const maxRetries = 15;
+  const retryDelay = 2000;
+
+  onLog(`[HEALTHCHECK] Waiting for application startup on port ${port}...`);
+
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      // Check if container responds over HTTP
+      const response = await fetch(`http://host.docker.internal:${port}`);
+
+      if (
+        response.ok ||
+        response.status === 301 ||
+        response.status === 302
+      ) {
+        onLog(`[HEALTHCHECK] Success on attempt ${attempt}.`);
+        return true;
+      }
+
+      onLog(
+        `[HEALTHCHECK] Attempt ${attempt}: HTTP ${response.status}`
+      );
+    } catch (err) {
+      onLog(
+        `[HEALTHCHECK] Attempt ${attempt} failed: ${err.message}`
+      );
+    }
+
+    await new Promise((resolve) =>
+      setTimeout(resolve, retryDelay)
+    );
+  }
+
+  onLog(`[HEALTHCHECK] Timed out after ${maxRetries} attempts.`);
+  return false;
 };
 
 const runShellCommand = (cmd, args, options, onLog) => {
@@ -411,7 +426,12 @@ export const runDeploymentPipeline = async (id) => {
       // Verify Health
       if (assignedPort) {
         await logToDb('STARTING', `Performing container network health check on port ${assignedPort}...`);
-        const isHealthy = await verifyHealth(assignedPort);
+        const isHealthy = await verifyHealth(
+          assignedPort,
+          async (msg) => {
+            await logToDb('STARTING', msg);
+          }
+        );
         if (!isHealthy) {
           throw new Error(`Health check failed: Port ${assignedPort} did not respond within timeout.`);
         }
@@ -520,8 +540,21 @@ CMD ["npm", "start"]`;
       
       // Verify Health
       await logToDb('STARTING', `Performing container network health check on port ${assignedPort}...`);
-      const isHealthy = await verifyHealth(assignedPort);
+      const isHealthy = await verifyHealth(
+        assignedPort,
+        async (msg) => {
+          await logToDb('STARTING', msg);
+        }
+      );
       if (!isHealthy) {
+        const containerInfo = await docker
+          .getContainer(containerNameOrId)
+          .inspect();
+
+        await logToDb(
+          'FAILED',
+          `[DEBUG] Container State: ${JSON.stringify(containerInfo.State)}`
+        );
         throw new Error(`Health check failed: Container is not responding on port ${assignedPort}.`);
       }
       
