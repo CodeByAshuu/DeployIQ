@@ -1,34 +1,74 @@
 pipeline {
     agent any
-    
     environment {
-        DOCKER_COMPOSE_CMD = 'docker-compose'
+        DOCKER_COMPOSE_CMD = 'docker compose'
     }
-    
+
     stages {
-        stage('Checkout') {
+
+        stage('Checkout Source') {
             steps {
                 checkout scm
             }
         }
-        
-        stage('Build Docker Images') {
+
+        stage('Build Frontend') {
             steps {
-                sh '${DOCKER_COMPOSE_CMD} build'
+                dir('frontend') {
+                    sh 'npm ci'
+                    sh 'npm run build'
+                }
             }
         }
-        
-        stage('Deploy') {
+
+        stage('Install Backend Dependencies') {
             steps {
-                sh '${DOCKER_COMPOSE_CMD} down'
-                sh '${DOCKER_COMPOSE_CMD} up -d'
+                dir('backend/auth-service') {
+                    sh 'npm ci'
+                    sh 'npx prisma generate'
+                }
             }
         }
+
+        stage('Build Analytics Service') {
+            steps {
+                dir('analytics-service') {
+                    sh 'chmod +x mvnw'
+                    sh './mvnw clean package -DskipTests'
+                }
+            }
+        }
+
+        stage('Validate Docker Compose') {
+            steps {
+                sh "${DOCKER_COMPOSE_CMD} config"
+            }
+        }
+
+        stage('Build Containers') {
+            steps {
+                sh "${DOCKER_COMPOSE_CMD} build"
+            }
+        }
+
+        stage('Deploy Containers') {
+            steps {
+                sh "${DOCKER_COMPOSE_CMD} down"
+                sh "${DOCKER_COMPOSE_CMD} up -d"
+            }
+        }
+
     }
-    
+
     post {
+        success {
+            echo 'DeployIQ deployment pipeline completed successfully.'
+        }
+        failure {
+            echo 'DeployIQ pipeline failed.'
+        }
         always {
-            echo 'Deployment cycle complete.'
+            echo 'Pipeline execution finished.'
         }
     }
 }
