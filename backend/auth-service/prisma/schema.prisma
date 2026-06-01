@@ -71,6 +71,9 @@ model Deployment {
   assignedPort  Int?
   deploymentUrl String?
   runtimeStatus String?          @default("STOPPED")
+  deploymentType String?
+  deployedPort   Int?
+  composeProjectName String?
   
   startedAt     DateTime?
   stoppedAt     DateTime?

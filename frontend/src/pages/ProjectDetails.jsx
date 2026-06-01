@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { getProject, deleteProject } from '../services/project.js';
-import { createDeployment, triggerDeployment, getProjectDeployments } from '../services/deployment.js';
+import { createDeployment, triggerDeployment, getProjectDeployments, deleteDeployment } from '../services/deployment.js';
 import { stopContainer, restartContainer, removeContainer } from '../services/docker.js';
 
 export default function ProjectDetails() {
@@ -88,6 +88,22 @@ export default function ProjectDetails() {
       alert(err.response?.data?.error || `Failed to ${action} container.`);
     } finally {
       setActionLoading(false);
+    }
+  };
+
+  const handleDestroyDeployment = async () => {
+    if (!activeDeployment) return;
+    if (window.confirm('Are you sure you want to completely destroy and stop this deployment?')) {
+      setActionLoading(true);
+      try {
+        await deleteDeployment(activeDeployment.id);
+        await fetchProjectAndDeployments();
+      } catch (err) {
+        console.error(err);
+        alert(err.response?.data?.error || 'Failed to destroy deployment.');
+      } finally {
+        setActionLoading(false);
+      }
     }
   };
 
@@ -251,52 +267,101 @@ export default function ProjectDetails() {
                 </div>
               </div>
               <div className="p-5 space-y-4">
-                {activeDeployment && activeDeployment.containerId ? (
+                {activeDeployment && (activeDeployment.containerId || ['CLONING', 'BUILDING', 'STARTING'].includes(activeDeployment.status)) ? (
                   <div className="space-y-4">
                     <div className="flex flex-col space-y-2">
                       <div className="flex items-center justify-between text-[10px] text-gray-400">
-                        <span>Container ID</span>
-                        <span className="font-mono text-white">{activeDeployment.containerId.substring(0, 12)}</span>
+                        <span>Deployment Status</span>
+                        <span className="font-mono text-amber-400 font-bold uppercase animate-pulse">{activeDeployment.status}</span>
                       </div>
                       <div className="flex items-center justify-between text-[10px] text-gray-400">
-                        <span>Image Name</span>
-                        <span className="font-mono text-white">{activeDeployment.imageName}</span>
+                        <span>Deployment Type</span>
+                        <span className="font-mono text-sky-400 font-bold">{activeDeployment.deploymentType || 'SINGLE'}</span>
                       </div>
-                      <div className="flex items-center justify-between text-[10px] text-gray-400">
-                        <span>Host Port</span>
-                        <span className="font-mono text-emerald-400">{activeDeployment.assignedPort}</span>
-                      </div>
+                      {activeDeployment.containerId && (
+                        <div className="flex items-center justify-between text-[10px] text-gray-400">
+                          <span>Container ID</span>
+                          <span className="font-mono text-white select-all">{activeDeployment.containerId.substring(0, 12)}</span>
+                        </div>
+                      )}
+                      {activeDeployment.imageName && (
+                        <div className="flex items-center justify-between text-[10px] text-gray-400">
+                          <span>Image Name</span>
+                          <span className="font-mono text-white truncate max-w-[200px]" title={activeDeployment.imageName}>{activeDeployment.imageName}</span>
+                        </div>
+                      )}
+                      {activeDeployment.composeProjectName && (
+                        <div className="flex items-center justify-between text-[10px] text-gray-400">
+                          <span>Compose Project</span>
+                          <span className="font-mono text-purple-400 select-all">{activeDeployment.composeProjectName}</span>
+                        </div>
+                      )}
+                      {activeDeployment.assignedPort && (
+                        <div className="flex items-center justify-between text-[10px] text-gray-400">
+                          <span>Exposed Host Port</span>
+                          <span className="font-mono text-emerald-400 font-bold">{activeDeployment.assignedPort}</span>
+                        </div>
+                      )}
+                      {activeDeployment.deploymentUrl && (
+                        <div className="flex items-center justify-between text-[10px] text-gray-400">
+                          <span>Deployment URL</span>
+                          <a href={activeDeployment.deploymentUrl} target="_blank" rel="noopener noreferrer" className="font-mono text-blue-400 underline hover:text-blue-300">
+                            {activeDeployment.deploymentUrl}
+                          </a>
+                        </div>
+                      )}
                     </div>
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-2 pt-2 border-t border-white/5">
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-2 pt-4 border-t border-white/5">
                       {activeDeployment.deploymentUrl && (
                         <a 
                           href={activeDeployment.deploymentUrl} 
                           target="_blank" 
                           rel="noopener noreferrer"
-                          className="text-center bg-blue-950/40 hover:bg-blue-900 border border-blue-500/30 text-blue-400 py-1.5 rounded text-[10px] font-bold uppercase transition-colors"
+                          className="text-center bg-blue-950/40 hover:bg-blue-900 border border-blue-500/30 text-blue-400 py-1.5 rounded text-[10px] font-bold uppercase transition-colors flex items-center justify-center cursor-pointer font-bold"
                         >
                           Open App
                         </a>
                       )}
                       <button 
                         onClick={() => navigate(`/deployments/${activeDeployment.id}`)}
-                        className="bg-zinc-800 hover:bg-zinc-700 border border-white/10 text-white py-1.5 rounded text-[10px] font-bold uppercase transition-colors"
+                        className="bg-zinc-800 hover:bg-zinc-700 border border-white/10 text-white py-1.5 rounded text-[10px] font-bold uppercase transition-colors cursor-pointer"
                       >
-                        Logs
+                        View Live Logs
                       </button>
                       <button 
                         onClick={() => handleContainerAction('restart')}
-                        disabled={actionLoading}
-                        className="bg-amber-950/40 hover:bg-amber-900 border border-amber-500/30 text-amber-400 py-1.5 rounded text-[10px] font-bold uppercase transition-colors disabled:opacity-50"
+                        disabled={actionLoading || !activeDeployment.containerId}
+                        className="bg-amber-950/40 hover:bg-amber-900 border border-amber-500/30 text-amber-400 py-1.5 rounded text-[10px] font-bold uppercase transition-colors disabled:opacity-50 cursor-pointer"
                       >
-                        Restart
+                        Restart Container
                       </button>
                       <button 
                         onClick={() => handleContainerAction('stop')}
-                        disabled={actionLoading}
-                        className="bg-rose-950/40 hover:bg-rose-900 border border-rose-500/30 text-rose-400 py-1.5 rounded text-[10px] font-bold uppercase transition-colors disabled:opacity-50"
+                        disabled={actionLoading || !activeDeployment.containerId}
+                        className="bg-rose-950/40 hover:bg-rose-900 border border-rose-500/30 text-rose-400 py-1.5 rounded text-[10px] font-bold uppercase transition-colors disabled:opacity-50 cursor-pointer"
                       >
-                        Stop
+                        Stop Container
+                      </button>
+                      <button 
+                        onClick={handleManualDeploy}
+                        disabled={isDeploying}
+                        className="bg-emerald-950/40 hover:bg-emerald-900 border border-emerald-500/30 text-emerald-400 py-1.5 rounded text-[10px] font-bold uppercase transition-colors disabled:opacity-50 cursor-pointer"
+                      >
+                        Rebuild
+                      </button>
+                      <button 
+                        onClick={handleManualDeploy}
+                        disabled={isDeploying}
+                        className="bg-emerald-950/40 hover:bg-emerald-900 border border-emerald-500/30 text-emerald-400 py-1.5 rounded text-[10px] font-bold uppercase transition-colors disabled:opacity-50 cursor-pointer"
+                      >
+                        Redeploy
+                      </button>
+                      <button 
+                        onClick={handleDestroyDeployment}
+                        disabled={actionLoading}
+                        className="bg-red-950/40 hover:bg-red-900 border border-red-500/30 text-red-400 py-1.5 rounded text-[10px] font-bold uppercase transition-colors disabled:opacity-50 cursor-pointer col-span-2"
+                      >
+                        Destroy Deployment
                       </button>
                     </div>
                   </div>

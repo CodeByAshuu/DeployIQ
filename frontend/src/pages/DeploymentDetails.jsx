@@ -43,14 +43,14 @@ export default function DeploymentDetails() {
     }
   };
 
-  const handleTriggerSimulate = async () => {
+  const handleTriggerDeployment = async () => {
     setIsTriggering(true);
     try {
       await triggerDeployment(id);
       fetchDeployment();
     } catch (err) {
       console.error(err);
-      alert('Failed to trigger deployment simulation.');
+      alert('Failed to trigger deployment.');
     } finally {
       setIsTriggering(false);
     }
@@ -172,26 +172,26 @@ export default function DeploymentDetails() {
         <div className="flex md:justify-end items-center">
           {deployment.status === 'PENDING' && (
             <button
-              onClick={handleTriggerSimulate}
+              onClick={handleTriggerDeployment}
               disabled={isTriggering}
-              className="w-full md:w-auto bg-emerald-950 hover:bg-emerald-900 border border-emerald-500/30 hover:border-emerald-500/50 text-emerald-400 hover:text-emerald-300 font-bold px-6 py-2.5 rounded-lg text-xs tracking-wider transition-all cursor-pointer"
+              className="w-full md:w-auto bg-emerald-950 hover:bg-emerald-900 border border-emerald-500/30 hover:border-emerald-500/50 text-emerald-400 hover:text-emerald-300 font-bold px-6 py-2.5 rounded-lg text-xs tracking-wider transition-all cursor-pointer font-bold"
             >
-              {isTriggering ? '$ executing...' : '$ trigger_pipeline'}
+              {isTriggering ? '$ executing...' : '$ trigger_deployment'}
             </button>
           )}
           {inProgress && (
             <div className="text-xs text-amber-400 flex items-center space-x-2 bg-amber-950/20 border border-amber-500/10 px-4 py-2.5 rounded-lg">
               <span className="w-2 h-2 bg-amber-500 rounded-full animate-ping"></span>
-              <span>SIMULATING PIPELINE AGENT RUNNING...</span>
+              <span>DEPLOYMENT ENGINE AGENT RUNNING...</span>
             </div>
           )}
           {(!inProgress && deployment.status !== 'PENDING') && (
             <button
-              onClick={handleTriggerSimulate}
+              onClick={handleTriggerDeployment}
               disabled={isTriggering}
               className="w-full md:w-auto bg-[#1a1a1a] hover:bg-[#202020] border border-white/10 hover:border-white/20 text-gray-400 hover:text-white px-5 py-2.5 rounded-lg text-xs transition-colors cursor-pointer"
             >
-              $ re_deploy_simulation
+              $ redeploy
             </button>
           )}
         </div>

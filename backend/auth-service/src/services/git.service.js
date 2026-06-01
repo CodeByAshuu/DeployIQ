@@ -1,9 +1,6 @@
-import { exec } from 'child_process';
-import { promisify } from 'util';
+import { spawn } from 'child_process';
 import path from 'path';
 import fs from 'fs/promises';
-
-const execAsync = promisify(exec);
 
 export const cloneRepository = async (repoUrl, projectId, onLog) => {
   // Store deployments inside the container's working directory
@@ -19,16 +16,42 @@ export const cloneRepository = async (repoUrl, projectId, onLog) => {
   onLog(`[GIT] Preparing to clone repository: ${repoUrl}`);
   onLog(`[GIT] Target directory: ${targetDir}`);
 
-  try {
-    const command = `git clone --depth 1 ${repoUrl} ${targetDir}`;
-    onLog(`[GIT] Executing: ${command}`);
-    const { stdout, stderr } = await execAsync(command);
-    if (stdout) onLog(`[GIT] ${stdout.trim()}`);
-    if (stderr) onLog(`[GIT] ${stderr.trim()}`); // git clone outputs progress to stderr
-    onLog(`[GIT] Repository cloned successfully.`);
-    return targetDir;
-  } catch (error) {
-    onLog(`[GIT] Error cloning repository: ${error.message}`);
-    throw new Error(`Git clone failed: ${error.message}`);
-  }
+  return new Promise((resolve, reject) => {
+    onLog(`[GIT] Executing: git clone --depth 1 ${repoUrl} ${targetDir}`);
+    
+    const child = spawn('git', ['clone', '--depth', '1', repoUrl, targetDir]);
+    
+    let buffer = '';
+    const handleData = (data) => {
+      buffer += data.toString();
+      const lines = buffer.split('\n');
+      buffer = lines.pop(); // keep last partial line
+      for (const line of lines) {
+        if (line.trim()) {
+          onLog(`[GIT] ${line.trim()}`);
+        }
+      }
+    };
+
+    child.stdout.on('data', handleData);
+    child.stderr.on('data', handleData);
+
+    child.on('close', (code) => {
+      if (buffer.trim()) {
+        onLog(`[GIT] ${buffer.trim()}`);
+      }
+      if (code === 0) {
+        onLog(`[GIT] Repository cloned successfully.`);
+        resolve(targetDir);
+      } else {
+        onLog(`[GIT] Git clone failed with exit code ${code}`);
+        reject(new Error(`Git clone failed with exit code ${code}`));
+      }
+    });
+
+    child.on('error', (err) => {
+      onLog(`[GIT] Spawn error: ${err.message}`);
+      reject(err);
+    });
+  });
 };

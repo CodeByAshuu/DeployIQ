@@ -155,3 +155,14 @@ export const getContainerLogs = async (id) => {
     throw new Error(`Failed to fetch container logs: ${error.message}`);
   }
 };
+
+export const removeImage = async (imageNameOrId) => {
+  try {
+    const image = docker.getImage(imageNameOrId);
+    await image.remove({ force: true });
+    return { message: 'Image removed successfully' };
+  } catch (error) {
+    console.error(`Docker removeImage error for ${imageNameOrId}:`, error);
+    throw new Error(`Failed to remove image: ${error.message}`);
+  }
+};
