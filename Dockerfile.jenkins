@@ -1,0 +1,15 @@
+FROM jenkins/jenkins:lts
+
+USER root
+
+# Install Node.js 20, Docker CLI, Java, Maven
+RUN apt-get update && apt-get install -y \
+    curl \
+    docker.io \
+    docker-compose \
+    maven \
+    && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+    && apt-get install -y nodejs \
+    && apt-get clean
+
+USER jenkins
